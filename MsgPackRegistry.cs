@@ -150,7 +150,7 @@ namespace MsgPack
 				}
 				else
 				{
-					var newSerializer = BuildSerializer(type);
+					var newSerializer = CreateSerializer(type);
 					if (newSerializer != null && newSerializer.Item1.m_objectSerializer != null)
 						newSerializer.Item1.m_objectSerializer(serializer, obj);
 					else
@@ -162,32 +162,38 @@ namespace MsgPack
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		internal static MsgPackObjectSerializer GetObjectSerializer<T>() => GetObjectSerializer(typeof(T));
-		internal static MsgPackObjectSerializer GetObjectSerializer(Type type)
+		internal static MsgPackObjectSerializer GetOrCreateObjectSerializer<T>() => GetOrCreateObjectSerializer(typeof(T));
+		internal static MsgPackObjectSerializer GetOrCreateObjectSerializer(Type type)
 		{
-			if (TryGetSerializer(type, out var methodInfo))
-				return methodInfo.m_objectSerializer;
-
-			return BuildSerializer(type)?.Item1.m_objectSerializer;
+			return TryGetSerializer(type, out var methodInfo)
+				? methodInfo.m_objectSerializer
+				: CreateSerializer(type)?.Item1.m_objectSerializer;
 		}
 
-		internal static MethodInfo GetSerializerMethod(Type type)
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		internal static MsgPackObjectDeserializer GetOrCreateObjectDeserializer<T>() => GetOrCreateObjectDeserializer(typeof(T));
+		internal static MsgPackObjectDeserializer GetOrCreateObjectDeserializer(Type type)
 		{
-			if (TryGetSerializer(type, out var methodInfo))
-				return methodInfo.m_method;
-
-			return BuildSerializer(type)?.Item1.m_method;
+			return TryGetDeserializer(type, out var methodInfo)
+				? methodInfo.m_dynamic
+				: CreateSerializer(type)?.Item2.m_dynamic;
 		}
 
-		internal static MethodInfo GetDeserializerMethod(Type type)
+		internal static MethodInfo GetOrCreateSerializerMethod(Type type)
 		{
-			if (TryGetDeserializer(type, out var methodInfo))
-				return methodInfo.m_method;
-
-			return BuildSerializer(type)?.Item2.m_method;
+			return TryGetSerializer(type, out var methodInfo)
+				? methodInfo.m_method
+				: CreateSerializer(type)?.Item1.m_method;
 		}
 
-		private static Tuple<Serializer, Deserializer> BuildSerializer(Type type)
+		internal static MethodInfo GetOrCreateDeserializerMethod(Type type)
+		{
+			return TryGetDeserializer(type, out var methodInfo)
+				? methodInfo.m_method
+				: CreateSerializer(type)?.Item2.m_method;
+		}
+
+		private static Tuple<Serializer, Deserializer> CreateSerializer(Type type)
 		{
 			if (type.IsPrimitive)
 			{

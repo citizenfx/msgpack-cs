@@ -179,6 +179,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
+    <Compile Include="Attributes\IgnoreAttribute.cs" />
+    <Compile Include="Attributes\KeyAttribute.cs" />
+    <Compile Include="Attributes\MsgPackSerializableAttribute.cs" />
+    <Compile Include="Attributes\IndexAttribute.cs" />
     <Compile Include="Benchmarks\VsMessagePackBenchmark.cs" />
     <Compile Include="PlatformTypes\Callback.cs" />
     <Compile Include="PlatformTypes\CString.cs" />

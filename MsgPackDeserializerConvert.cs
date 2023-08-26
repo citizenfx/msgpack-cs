@@ -427,19 +427,6 @@ namespace MsgPack
 
 		#endregion
 	}
-
-	[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
-	public class IndexAttribute : Attribute
-	{
-		private readonly uint m_index = uint.MaxValue;
-		private readonly byte[] m_key = null;
-
-		public uint Index => m_index;
-		public string Key => Encoding.UTF8.GetString(m_key);
-
-		public IndexAttribute(uint index) => m_index = index;
-		public IndexAttribute(string key) => m_key = Encoding.UTF8.GetBytes(key);
-	}
 }
 
 #pragma warning restore IDE0004 // Remove unnecessary cast

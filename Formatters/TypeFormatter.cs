@@ -50,10 +50,24 @@ namespace MsgPack.Formatters
 			{
 				TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
 				{
+					bool customSerialization = type.GetCustomAttribute<MsgPackSerializableAttribute>() != null;
+
+					
+
 					MethodBuilder methodSerialize = typeBuilder.DefineMethod("Serialize", MethodAttributes.Public | MethodAttributes.Static,
 						typeof(void), new[] { typeof(MsgPackSerializer), type });
 					{
-						var g = methodSerialize.GetILGenerator();						
+						var g = methodSerialize.GetILGenerator();
+
+						if (type.GetCustomAttribute<MsgPackSerializableAttribute>() != null)
+						{
+
+						}
+						else // no custom layout, fall back to serializing all public fields (verbose)
+						{
+
+						}
+
 						g.Emit(OpCodes.Ret);
 					}
 
@@ -231,12 +245,76 @@ namespace MsgPack.Formatters
 			return new Tuple<Serializer, Deserializer>(serializeMethod, deserializeMethod);
 		}
 
+		private struct Item
+		{
+			public bool taken;
+			public FieldInfo field;
+			public PropertyInfo property;
+		};
 
+		static void BuildSerializerIndexed(Type type, ILGenerator g)
+		{
+			FieldInfo[] fields = type.GetFields(BindingFlags.Public);
+			PropertyInfo[] properties = type.GetProperties(BindingFlags.Public);
+
+			Item[] items = new Item[fields.Length + properties.Length]; // make it big enough
+			uint maxIndex = 0;
+
+			void AddItem(uint index, FieldInfo field, PropertyInfo property)
+			{
+				ref Item item = ref items[index];
+
+				if (!item.taken)
+				{
+					item.taken = true;
+					item.field = field;
+					item.property = property;
+
+					if (index > maxIndex)
+						maxIndex = index;
+				}
+				else
+					throw new FormatException("Duplicate index");
+			}
+
+			// add fields
+			for (int i = 0; i < fields.Length; ++i)
+			{
+				var field = fields[i];
+				var indexAttribute = field.GetCustomAttribute<IndexAttribute>();
+				
+				if (indexAttribute != null)
+				{
+					AddItem(indexAttribute.Index, field, null);
+				}
+			}
+
+			// add properties
+			for (int i = 0; i < properties.Length; ++i)
+			{
+				var property = properties[i];
+
+				if (property.GetMethod?.IsPublic == true && property.SetMethod?.IsPublic == true)
+				{
+					var indexAttribute = property.GetCustomAttribute<IndexAttribute>();
+
+					if (indexAttribute != null)
+					{
+						AddItem(indexAttribute.Index, null, property);
+					}
+				}
+			}
+		}
+
+		static void BuildSerializerDefault(Type type, ILGenerator g)
+		{
+			
+		}
 
 		/// <summary>
 		/// Constructor selection logic only considering single parameter constructors.<br />
 		///  * signed and unsigned integers favor biggest storage types.<br />
-		///  * <see cref="float"/> and <see cref="double"/> favor itself and falls back to the other if not found.<br />
+		///  * <see cref="float"/> and <see cref="double"/> favor itself and fall back to the other if not found.<br />
 		///  * Other types only consider their own type.
 		/// </summary>
 		/// <param name="type">type to construct </param>

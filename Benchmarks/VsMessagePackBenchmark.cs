@@ -14,8 +14,8 @@ namespace MsgPack
 		[GlobalSetup]
 		public void Setup()
 		{
-			MsgPackRegistry.GetSerializerMethod(typeof(Dictionary<string, string>));
-			MsgPackRegistry.GetSerializerMethod(typeof(string[]));
+			MsgPackRegistry.GetOrCreateSerializerMethod(typeof(Dictionary<string, string>));
+			MsgPackRegistry.GetOrCreateSerializerMethod(typeof(string[]));
 		}
 
 		[Benchmark(Description = "thorium Serialize(int)", OperationsPerInvoke = 5 * Iterations)]
