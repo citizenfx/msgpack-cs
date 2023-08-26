@@ -12,58 +12,38 @@ namespace MsgPack.Tests
 	{
 		static Serialize()
 		{
-			MsgPackRegistry.GetSerializerMethod(typeof(Dictionary<string, string>));
-			MsgPackRegistry.GetSerializerMethod(typeof(string[]));
+			MsgPackRegistry.GetOrCreateSerializerMethod(typeof(Dictionary<string, string>));
+			MsgPackRegistry.GetOrCreateSerializerMethod(typeof(string[]));
 		}
 
 		[TestMethod]
 		public void _Dummy()
 		{
-			Assert.IsTrue(MsgPackRegistry.GetSerializerMethod(typeof(Dictionary<string, string>)) != null);
-			Assert.IsTrue(MsgPackRegistry.GetSerializerMethod(typeof(string[])) != null);
+			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializerMethod(typeof(Dictionary<string, string>)) != null);
+			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializerMethod(typeof(string[])) != null);
 		}
 
 		[TestMethod]
-		public void SerializeInt()
+		public void SerializeIntegers()
 		{
+			Tuple<int, byte[]>[] tests = new Tuple<int, byte[]>[]
 			{
-				MsgPackSerializer serializer = new MsgPackSerializer();
-				serializer.Serialize(1);
-				byte[] result = serializer.ToArray();
-				byte[] expect = new byte[] { 0x01 };
-				Assert.IsTrue(result.SequenceEqual(expect), $"-1 is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(expect)}`");
-			}
+				new Tuple<int, byte[]>(1, new byte[] { 0x01 }),
+				new Tuple<int, byte[]>(-1, new byte[] { 0xFF }),
+				new Tuple<int, byte[]>(-2, new byte[] { 0xFE }),
+				new Tuple<int, byte[]>(-128, new byte[] { 0xD0, 0x80 }),
+				new Tuple<int, byte[]>(-129, new byte[] { 0xD1, 0xFF, 0x7F }),
+				
+			};
 
+			for (int i = 0; i < tests.Length; ++i)
 			{
-				MsgPackSerializer serializer = new MsgPackSerializer();
-				serializer.Serialize(-1);
-				byte[] result = serializer.ToArray();
-				byte[] expect = new byte[] { 0xFF };
-				Assert.IsTrue(result.SequenceEqual(expect), $"-1 is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(expect)}`");
-			}
+				var value = tests[i];
 
-			{
 				MsgPackSerializer serializer = new MsgPackSerializer();
-				serializer.Serialize(-2);
+				serializer.Serialize(value.Item1);
 				byte[] result = serializer.ToArray();
-				byte[] expect = new byte[] { 0xFE };
-				Assert.IsTrue(result.SequenceEqual(expect), $"-2 is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(expect)}`");
-			}
-
-			{
-				MsgPackSerializer serializer = new MsgPackSerializer();
-				serializer.Serialize(-128);
-				byte[] result = serializer.ToArray();
-				byte[] expect = new byte[] { 0xD0, 0x80 };
-				Assert.IsTrue(result.SequenceEqual(expect), $"-128 is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(expect)}`");
-			}
-
-			{
-				MsgPackSerializer serializer = new MsgPackSerializer();
-				serializer.Serialize(-129);
-				byte[] result = serializer.ToArray();
-				byte[] expect = new byte[] { 0xD1, 0xFF, 0x7F };
-				Assert.IsTrue(result.SequenceEqual(expect), $"-129 is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(expect)}`");
+				Assert.IsTrue(result.SequenceEqual(value.Item2), $"{value.Item1} is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(value.Item2)}`");
 			}
 		}
 

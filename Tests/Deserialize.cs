@@ -1,10 +1,5 @@
-﻿using CommandLine;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MsgPack.Tests
 {
@@ -13,7 +8,7 @@ namespace MsgPack.Tests
 	{
 		static Deserialize()
 		{
-			MsgPackRegistry.GetDeserializerMethod(typeof(Player));
+			MsgPackRegistry.GetOrCreateDeserializerMethod(typeof(Player));
 		}
 
 		[TestMethod]
