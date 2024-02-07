@@ -6,7 +6,11 @@ using System.Threading.Tasks;
 
 namespace MsgPack
 {
-	internal class Callback
+	public class Callback
 	{
-	}
+        public Callback(string address)
+        {
+
+        }
+    }
 }

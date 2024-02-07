@@ -195,6 +195,7 @@
     <Compile Include="MsgPacker.cs" />
     <Compile Include="MsgPackRegistry.cs" />
     <Compile Include="MsgPackSerializer.cs" />
+    <Compile Include="PlatformTypes\Vector2.cs" />
     <Compile Include="Tests\Deserialize.cs" />
     <Compile Include="PlatformTypes\Player.cs" />
     <Compile Include="Tests\Serialize.cs" />

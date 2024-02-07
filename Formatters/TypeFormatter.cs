@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Reflection.Emit;
 using System.Reflection;
 using ConstructorChoice = System.Collections.Generic.KeyValuePair<System.Reflection.ConstructorInfo, System.Reflection.Emit.OpCode>;
+using System.Linq;
 
 namespace MsgPack.Formatters
 {
@@ -31,7 +33,7 @@ namespace MsgPack.Formatters
 			Float32, Float64,
 			UInt8, UInt16, UInt32, UInt64,
 			Int8, Int16, Int32, Int64,
-			//FixExt1, FixExt2, FixExt4, FixExt8, FixExt16,
+			FixExt1, FixExt2, FixExt4, FixExt8, FixExt16,
 			//Str8, Str16, Str32,
 			//Array8, Array16, Array32,
 			//Map16, Map32,
@@ -39,9 +41,28 @@ namespace MsgPack.Formatters
 			Count,
 			First = 0xC0,
 			Last = First + Count,
-		}
+        }
+        enum JumpLabelsExtra
+        {
+			// Jump table
+            Vector2,
+            Vector3,
+            Vector4,
+            Quaternion,
 
-		public static Tuple<Serializer, Deserializer> Build(Type type)
+            Count,
+            First = 0x20,
+            Last = First + Count,
+        }
+
+        private struct Item
+        {
+            public bool taken;
+            public FieldInfo field;
+            public PropertyInfo property;
+        };
+
+        public static Tuple<Serializer, Deserializer> Build(Type type)
 		{
 			string name = $"TypeFormatter<{type.FullName}>";
 			Type buildType = MsgPackRegistry.m_moduleBuilder.GetType(name);
@@ -51,22 +72,62 @@ namespace MsgPack.Formatters
 				TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
 				{
 					bool customSerialization = type.GetCustomAttribute<MsgPackSerializableAttribute>() != null;
-
 					
-
 					MethodBuilder methodSerialize = typeBuilder.DefineMethod("Serialize", MethodAttributes.Public | MethodAttributes.Static,
 						typeof(void), new[] { typeof(MsgPackSerializer), type });
 					{
 						var g = methodSerialize.GetILGenerator();
 
-						if (type.GetCustomAttribute<MsgPackSerializableAttribute>() != null)
-						{
+						var allMembers = type.GetMembers(BindingFlags.Instance | BindingFlags.Public);
 
-						}
-						else // no custom layout, fall back to serializing all public fields (verbose)
+						if (type.GetCustomAttribute<MsgPackSerializableAttribute>() is MsgPackSerializableAttribute serializable && serializable.Layout != Layout.Default)
 						{
+                            switch (serializable.Layout)
+							{
+								case Layout.Indexed:
+									{
+										uint maxIndex = allMembers.Max(m => m.GetCustomAttribute<IndexAttribute>() is IndexAttribute index ? index.Index : 0);
+										MemberInfo[] members = new MemberInfo[maxIndex];
 
-						}
+										for (uint i = 0; i < allMembers.Length; ++i)
+										{
+											var member = allMembers[i];
+											if ((member.MemberType & (MemberTypes.Field | MemberTypes.Property)) != 0)
+											{
+												if (member.GetCustomAttribute<IndexAttribute>() is IndexAttribute index)
+												{
+													if (members[index.Index] == null)
+														members[index.Index] = member;
+													else
+														throw new FormatException($"Duplicate index, can't add {member.Name} in slot {index.Index} as it's already taken by {members[index.Index].Name}");
+                                                }
+											}
+										}
+
+										BuildArraySerializeBody(type, g, members, methodSerialize);
+									}
+                                    break;
+
+                                case Layout.Keyed:
+									{
+										MemberInfo[] members = Array.FindAll(allMembers, m =>
+											(m.MemberType & (MemberTypes.Field | MemberTypes.Property)) != 0
+											&& m.GetCustomAttribute<KeyAttribute>() is KeyAttribute);
+
+										BuildMapSerializeBody(type, g, members, methodSerialize);
+									}
+                                    break;
+                            }
+
+                        }
+						else // no custom layout, fall back to serializing all public fields and properties (verbose)
+                        {
+                            MemberInfo[] members = Array.FindAll(allMembers, m =>
+                                (m.MemberType & (MemberTypes.Field | MemberTypes.Property)) != 0
+                                && m.GetCustomAttribute<IgnoreAttribute>() == null);
+
+                            BuildMapSerializeBody(type, g, members, methodSerialize);
+                        }
 
 						g.Emit(OpCodes.Ret);
 					}
@@ -78,6 +139,7 @@ namespace MsgPack.Formatters
 
 						var g = methodDeserialize.GetILGenerator();
 						g.DeclareLocal(typeof(byte));
+						g.DeclareLocal(typeof(uint));
 
 						Label lblFixIntPositive = g.DefineLabel(), lblFixIntNegative = g.DefineLabel();
 						Label[] labels = new Label[(uint)JumpLabels.Count];
@@ -112,9 +174,6 @@ namespace MsgPack.Formatters
 						g.MarkLabel(labels[(uint)JumpLabels.Bin8]);
 						g.MarkLabel(labels[(uint)JumpLabels.Bin16]);
 						g.MarkLabel(labels[(uint)JumpLabels.Bin32]);
-						g.MarkLabel(labels[(uint)JumpLabels.Ext8]);
-						g.MarkLabel(labels[(uint)JumpLabels.Ext16]);
-						g.MarkLabel(labels[(uint)JumpLabels.Ext32]);
 
 						g.Emit(OpCodes.Newobj, typeof(InvalidCastException).GetConstructor(Type.EmptyTypes));
 						g.Emit(OpCodes.Throw);
@@ -162,12 +221,24 @@ namespace MsgPack.Formatters
 						g.MarkLabel(labels[(uint)JumpLabels.False]);
 						SwitchCase(g, OpCodes.Ldc_I4_0, constructors[(uint)ConstructorOptions.Bool]);
 
-						// case 0xc2: true
+						// case 0xc3: true
 						g.MarkLabel(labels[(uint)JumpLabels.True]);
 						SwitchCase(g, OpCodes.Ldc_I4_1, constructors[(uint)ConstructorOptions.Bool]);
 
-						// case 0xca: float32
-						g.MarkLabel(labels[(uint)JumpLabels.Float32]);
+						// case 0xc7: Extra 8 bit
+                        g.MarkLabel(labels[(uint)JumpLabels.Ext8]);
+                        SwitchCaseExtraType(g, ((GetMethod<byte>)MsgPackDeserializer.ReadUInt8).Method, type);
+
+                        // case 0xc8: Extra 16 bit
+                        g.MarkLabel(labels[(uint)JumpLabels.Ext16]);
+                        SwitchCaseExtraType(g, ((GetMethod<ushort>)MsgPackDeserializer.ReadUInt16).Method, type);
+
+                        // case 0xc9: Extra 32 bit
+                        g.MarkLabel(labels[(uint)JumpLabels.Ext32]);
+                        SwitchCaseExtraType(g, ((GetMethod<uint>)MsgPackDeserializer.ReadUInt32).Method, type);
+
+                        // case 0xca: float32
+                        g.MarkLabel(labels[(uint)JumpLabels.Float32]);
 						SwitchCase(g, ((GetMethod<float>)MsgPackDeserializer.ReadSingle).Method, constructors[(uint)ConstructorOptions.Float32]);
 
 						// case 0xcb: float64
@@ -206,7 +277,11 @@ namespace MsgPack.Formatters
 						g.MarkLabel(labels[(uint)JumpLabels.Int64]);
 						SwitchCase(g, ((GetMethod<long>)MsgPackDeserializer.ReadInt64).Method, constructors[(uint)ConstructorOptions.Int]);
 
-						g.Emit(OpCodes.Ret);
+                        // case 0xd4: fixed extension type
+                        g.MarkLabel(labels[(uint)JumpLabels.FixExt1]);
+                        SwitchCase(g, ((GetMethod<long>)MsgPackDeserializer.ReadInt64).Method, constructors[(uint)ConstructorOptions.Int]);
+
+                        g.Emit(OpCodes.Ret);
 					}
 
 					MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("SerializeObject", MethodAttributes.Public | MethodAttributes.Static,
@@ -245,70 +320,145 @@ namespace MsgPack.Formatters
 			return new Tuple<Serializer, Deserializer>(serializeMethod, deserializeMethod);
 		}
 
-		private struct Item
-		{
-			public bool taken;
-			public FieldInfo field;
-			public PropertyInfo property;
-		};
+		/// <summary>
+		/// Builds the IL code needed for the array serializing
+		/// </summary>
+		/// <param name="type">Type we're building this serializer for</param>
+		/// <param name="g">ILGenerator for writing the body</param>
+		/// <param name="members">Filtered and ordered array by <see cref="IndexAttribute"/>, null values are honored by writing <see cref="MsgPackCode.Nil"/></param>
+		/// <param name="currentSerializer">Method for recursive calls, i.e.: the caller itself</param>
+		/// <exception cref="NotSupportedException"></exception>
+		/// <exception cref="ArgumentException"></exception>
+        public static void BuildArraySerializeBody(Type type, ILGenerator g, MemberInfo[] members, MethodInfo currentSerializer)
+        {
+            var methodWriteNil = typeof(MsgPackSerializer).GetMethod("WriteNil");
 
-		static void BuildSerializerIndexed(Type type, ILGenerator g)
-		{
-			FieldInfo[] fields = type.GetFields(BindingFlags.Public);
-			PropertyInfo[] properties = type.GetProperties(BindingFlags.Public);
+            // write header
+            g.Emit(OpCodes.Ldc_I4, members.Length);
+            g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteArrayHeader", new[] { typeof(uint) }), null);
 
-			Item[] items = new Item[fields.Length + properties.Length]; // make it big enough
-			uint maxIndex = 0;
+            for (uint i = 0; i < members.Length; ++i)
+            {
+                switch (members[i])
+                {
+                    case FieldInfo field:
+                        {
+                            var methodFieldSerializer = type == field.FieldType
+                                ? currentSerializer
+                                : MsgPackRegistry.GetOrCreateObjectSerializer(field.FieldType).Method;
 
-			void AddItem(uint index, FieldInfo field, PropertyInfo property)
+                            if (methodFieldSerializer == null)
+                                throw new NotSupportedException($"Requested serializer for {type.Name}.{field.Name} of type {field.FieldType} could not be found.");
+
+                            // Value
+                            g.Emit(OpCodes.Ldarg_0);
+                            g.Emit(OpCodes.Ldarg_1);
+                            g.Emit(OpCodes.Ldfld, field);
+                            g.EmitCall(OpCodes.Call, methodFieldSerializer, null);
+                        }
+                        break;
+
+                    case PropertyInfo property:
+                        {
+                            var methodFieldSerializer = type == property.PropertyType
+                                ? currentSerializer
+                                : MsgPackRegistry.GetOrCreateObjectSerializer(property.PropertyType).Method;
+
+                            if (methodFieldSerializer == null)
+                                throw new NotSupportedException($"Requested serializer for {type.Name}.{property.Name} of type {property.PropertyType} could not be found.");
+
+                            // Value
+                            g.Emit(OpCodes.Ldarg_0);
+                            g.Emit(OpCodes.Ldarg_1);
+                            g.EmitCall(OpCodes.Call, property.GetMethod, null);
+                            g.EmitCall(OpCodes.Call, methodFieldSerializer, null);
+                        }
+                        break;
+
+                    case null:
+                        g.Emit(OpCodes.Ldarg_0);
+                        g.EmitCall(OpCodes.Call, methodWriteNil, null);
+                        break;
+
+                    default:
+                        throw new ArgumentException($"Member type {members[i].GetType()} is not supported");
+                }
+            }
+
+            g.Emit(OpCodes.Ret);
+        }
+
+        /// <summary>
+		/// Builds the IL code needed for the map serializing
+        /// </summary>
+		/// <param name="members">Filtered by <see cref="KeyAttribute"/>, null values are ignored</param>
+        /// <inheritdoc cref="BuildArraySerializeBody"/>
+        public static void BuildMapSerializeBody(Type type, ILGenerator g, MemberInfo[] members, MethodInfo currentSerializer)
+        {
+            var methodStringSerializer = typeof(MsgPackSerializer).GetMethod("Serialize", new Type[] { typeof(string) });
+
+            // write header
+            g.Emit(OpCodes.Ldc_I4, members.Length);
+            g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteMapHeader", new[] { typeof(uint) }), null);
+
+            for (uint i = 0; i < members.Length; ++i)
 			{
-				ref Item item = ref items[index];
-
-				if (!item.taken)
+				switch (members[i])
 				{
-					item.taken = true;
-					item.field = field;
-					item.property = property;
+					case FieldInfo field:
+						{
+							var methodFieldSerializer = type == field.FieldType
+								? currentSerializer
+								: MsgPackRegistry.GetOrCreateObjectSerializer(field.FieldType).Method;
 
-					if (index > maxIndex)
-						maxIndex = index;
-				}
-				else
-					throw new FormatException("Duplicate index");
+							if (methodFieldSerializer == null)
+								throw new NotSupportedException($"Requested serializer for {type.Name}.{field.Name} of type {field.FieldType} could not be found.");
+
+							// Key
+							g.Emit(OpCodes.Ldarg_0);
+							g.Emit(OpCodes.Ldstr, field.Name);
+							g.EmitCall(OpCodes.Call, methodStringSerializer, null);
+
+							// Value
+							g.Emit(OpCodes.Ldarg_0);
+							g.Emit(OpCodes.Ldarg_1);
+							g.Emit(OpCodes.Ldfld, field);
+							g.EmitCall(OpCodes.Call, methodFieldSerializer, null);
+						}
+                        break;
+
+                    case PropertyInfo property:
+						{
+							var methodFieldSerializer = type == property.PropertyType
+								? currentSerializer
+                                : MsgPackRegistry.GetOrCreateObjectSerializer(property.PropertyType).Method;
+
+							if (methodFieldSerializer == null)
+								throw new NotSupportedException($"Requested serializer for {type.Name}.{property.Name} of type {property.PropertyType} could not be found.");
+
+							// Key
+							g.Emit(OpCodes.Ldarg_0);
+							g.Emit(OpCodes.Ldstr, property.Name);
+							g.EmitCall(OpCodes.Call, methodStringSerializer, null);
+
+							// Value
+							g.Emit(OpCodes.Ldarg_0);
+							g.Emit(OpCodes.Ldarg_1);
+							g.EmitCall(OpCodes.Call, property.GetMethod, null);
+							g.EmitCall(OpCodes.Call, methodFieldSerializer, null);
+						}
+                        break;
+
+					case null:
+						// fine, but ignore
+						break;
+
+					default:
+						throw new ArgumentException($"Member type {members[i].GetType()} is not supported");
+                }
 			}
 
-			// add fields
-			for (int i = 0; i < fields.Length; ++i)
-			{
-				var field = fields[i];
-				var indexAttribute = field.GetCustomAttribute<IndexAttribute>();
-				
-				if (indexAttribute != null)
-				{
-					AddItem(indexAttribute.Index, field, null);
-				}
-			}
-
-			// add properties
-			for (int i = 0; i < properties.Length; ++i)
-			{
-				var property = properties[i];
-
-				if (property.GetMethod?.IsPublic == true && property.SetMethod?.IsPublic == true)
-				{
-					var indexAttribute = property.GetCustomAttribute<IndexAttribute>();
-
-					if (indexAttribute != null)
-					{
-						AddItem(indexAttribute.Index, null, property);
-					}
-				}
-			}
-		}
-
-		static void BuildSerializerDefault(Type type, ILGenerator g)
-		{
-			
+			g.Emit(OpCodes.Ret);
 		}
 
 		/// <summary>
@@ -436,5 +586,212 @@ namespace MsgPack.Formatters
 				g.Emit(OpCodes.Throw);
 			}
 		}
+
+		private static void SwitchCaseExtraType(ILGenerator g, MethodInfo methodReadInteger, Type type)
+        {
+            Label isNot10Label = g.DefineLabel(), isNot11Label = g.DefineLabel(), endLabel = g.DefineLabel();
+            Label[] labels = new Label[(uint)JumpLabelsExtra.Count];
+            for (uint i = 0; i < labels.Length; ++i)
+            {
+                labels[i] = g.DefineLabel();
+            }
+
+			var methodReadString = ((GetMethod<string, uint>)MsgPackDeserializer.ReadString).Method;
+			var methodSkipString = ((GetMethodVoid<uint>)MsgPackDeserializer.SkipString).Method;
+			var methodReadSingle = ((GetMethod<float>)MsgPackDeserializer.ReadSingleLE).Method;
+			ConstructorInfo constructor = null;
+			ConstructorInfo constructorCallback = typeof(Callback).GetConstructor(new Type[] { typeof(string) });
+
+            // size
+            g.Emit(OpCodes.Ldarg_0);
+            g.Emit(OpCodes.Call, methodReadInteger);
+            g.Emit(OpCodes.Stloc_1);
+
+			// type code
+            g.Emit(OpCodes.Ldarg_0);
+            g.Emit(OpCodes.Call, ((GetMethod<byte>)MsgPackDeserializer.ReadByte).Method);
+            g.Emit(OpCodes.Stloc_0);
+
+            // case 10: RemoteFunc
+            g.Emit(OpCodes.Ldloc_0);
+			g.Emit(OpCodes.Ldc_I4_S, (byte)10);
+            g.Emit(OpCodes.Bne_Un_S, isNot10Label);
+            if ((constructor = type.GetConstructor(new Type[] { typeof(Callback) })) != null)
+            {
+                g.Emit(OpCodes.Ldarg_0);
+                g.Emit(OpCodes.Ldloc_1);
+                g.Emit(OpCodes.Newobj, constructorCallback);
+                g.Emit(OpCodes.Newobj, constructor);
+                g.Emit(OpCodes.Ret);
+            }
+			else
+            {
+                g.EmitCall(OpCodes.Call, methodSkipString, null);
+                g.Emit(OpCodes.Br, endLabel);
+            }
+
+            // case 11: RemoteFunc
+            g.MarkLabel(isNot10Label);
+            g.Emit(OpCodes.Ldloc_0);
+            g.Emit(OpCodes.Ldc_I4_S, (byte)11);
+            g.Emit(OpCodes.Bne_Un_S, isNot11Label);
+            if ((constructor = type.GetConstructor(new Type[] { typeof(Callback) })) != null)
+            {
+                g.Emit(OpCodes.Ldarg_0);
+                g.Emit(OpCodes.Ldloc_1);
+                g.Emit(OpCodes.Newobj, constructorCallback);
+                g.Emit(OpCodes.Newobj, constructor);
+                g.Emit(OpCodes.Ret);
+            }
+            else
+            {
+                g.EmitCall(OpCodes.Call, methodSkipString, null);
+                g.Emit(OpCodes.Br, endLabel);
+            }
+
+            // switch
+            g.Emit(OpCodes.Ldloc_0);
+            g.Emit(OpCodes.Ldc_I4, (int)JumpLabelsExtra.First);
+            g.Emit(OpCodes.Sub);
+            g.Emit(OpCodes.Switch, labels);
+            g.Emit(OpCodes.Br, endLabel);
+
+            // case 20: Vector2
+            g.MarkLabel(labels[(int)JumpLabelsExtra.Vector2]);
+
+			if ((constructor = type.GetConstructor(new Type[] { typeof(float), typeof(float) })) != null)
+			{
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Newobj, constructor);
+				g.Emit(OpCodes.Ret);
+			}
+			else if ((constructor = type.GetConstructor(new Type[] { typeof(Vector2) })) != null)
+			{
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Newobj, typeof(Vector2).GetConstructor(new Type[] { typeof(float), typeof(float), typeof(float) }));
+				g.Emit(OpCodes.Newobj, constructor);
+				g.Emit(OpCodes.Ret);
+			}
+			else
+			{
+				g.EmitCall(OpCodes.Call, ((GetMethodVoid)MsgPackDeserializer.SkipVector2).Method, null);
+				g.Emit(OpCodes.Br, endLabel);
+			}
+
+            // case 21: Vector3
+            g.MarkLabel(labels[(int)JumpLabelsExtra.Vector3]);
+
+            if ((constructor = type.GetConstructor(new Type[] { typeof(float), typeof(float), typeof(float) })) != null)
+			{
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Newobj, constructor);
+                g.Emit(OpCodes.Ret);
+            }
+			else if ((constructor = type.GetConstructor(new Type[] { typeof(Vector3) })) != null)
+			{
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Newobj, typeof(Vector3).GetConstructor(new Type[] { typeof(float), typeof(float), typeof(float) }));
+                g.Emit(OpCodes.Newobj, constructor);
+                g.Emit(OpCodes.Ret);
+            }
+            else
+            {
+                g.EmitCall(OpCodes.Call, ((GetMethodVoid)MsgPackDeserializer.SkipVector3).Method, null);
+                g.Emit(OpCodes.Br, endLabel);
+            }
+
+            // case 22: Vector4
+            g.MarkLabel(labels[(int)JumpLabelsExtra.Vector4]);
+
+            if ((constructor = type.GetConstructor(new Type[] { typeof(float), typeof(float), typeof(float), typeof(float) })) != null)
+            {
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Newobj, constructor);
+                g.Emit(OpCodes.Ret);
+            }
+            else if ((constructor = type.GetConstructor(new Type[] { typeof(Vector4) })) != null)
+            {
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Ldarg_0);
+                g.EmitCall(OpCodes.Call, methodReadSingle, null);
+                g.Emit(OpCodes.Newobj, typeof(Vector4).GetConstructor(new Type[] { typeof(float), typeof(float), typeof(float), typeof(float) }));
+                g.Emit(OpCodes.Newobj, constructor);
+                g.Emit(OpCodes.Ret);
+            }
+            else
+            {
+                g.EmitCall(OpCodes.Call, ((GetMethodVoid)MsgPackDeserializer.SkipVector4).Method, null);
+                g.Emit(OpCodes.Br, endLabel);
+            }
+
+            // case 23: Quaternion
+            g.MarkLabel(labels[(int)JumpLabelsExtra.Quaternion]);
+
+			if ((constructor = type.GetConstructor(new Type[] { typeof(float), typeof(float), typeof(float), typeof(float) })) != null)
+			{
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Newobj, constructor);
+				g.Emit(OpCodes.Ret);
+			}
+			else if ((constructor = type.GetConstructor(new Type[] { typeof(Quaternion) })) != null)
+			{
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, methodReadSingle, null);
+				g.Emit(OpCodes.Newobj, typeof(Quaternion).GetConstructor(new Type[] { typeof(float), typeof(float), typeof(float), typeof(float) }));
+				g.Emit(OpCodes.Newobj, constructor);
+				g.Emit(OpCodes.Ret);
+            }
+            else
+            {
+                g.EmitCall(OpCodes.Call, ((GetMethodVoid)MsgPackDeserializer.SkipQuaternion).Method, null);
+                g.Emit(OpCodes.Br, endLabel);
+            }
+
+            // Can't create our type, throw exception
+            g.MarkLabel(endLabel);
+            g.Emit(OpCodes.Newobj, typeof(InvalidCastException).GetConstructor(Type.EmptyTypes));
+            g.Emit(OpCodes.Throw);
+        }
 	}
 }

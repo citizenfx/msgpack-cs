@@ -486,5 +486,14 @@ namespace MsgPack
 		public static short ReadInt16(ref MsgPackDeserializer deserializer) => deserializer.ReadInt16();
 		public static int ReadInt32(ref MsgPackDeserializer deserializer) => deserializer.ReadInt32();
 		public static long ReadInt64(ref MsgPackDeserializer deserializer) => deserializer.ReadInt64();
-	}
+
+		public static string ReadString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadString(length);
+		public static void SkipString(ref MsgPackDeserializer deserializer, uint length) => deserializer.SkipString(length);
+		public static float ReadSingleLE(ref MsgPackDeserializer deserializer) => deserializer.ReadSingleLE();
+
+		public static void SkipVector2(ref MsgPackDeserializer deserializer) => deserializer.SkipVector2();
+		public static void SkipVector3(ref MsgPackDeserializer deserializer) => deserializer.SkipVector3();
+		public static void SkipVector4(ref MsgPackDeserializer deserializer) => deserializer.SkipVector4();
+		public static void SkipQuaternion(ref MsgPackDeserializer deserializer) => deserializer.SkipQuaternion();
+    }
 }
