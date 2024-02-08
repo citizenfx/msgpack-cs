@@ -4,46 +4,64 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Diagnostics.Runtime.Utilities;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace MsgPack.Tests
 {
 	[TestClass]
 	public class Serialize
 	{
+		private struct SerializeTest<T>
+		{
+			public T Input { private set; get; }
+			public byte[] ExpectedResult { private set; get; }
+
+			public SerializeTest(T input, byte[] expectedResult)
+			{
+				Input = input;
+				ExpectedResult = expectedResult;
+			}
+
+			public void AssertValidate(MsgPackSerializer serializer)
+			{
+				byte[] result = serializer.ToArray();
+                Assert.IsTrue(ExpectedResult.SequenceEqual(result), $"{Input} is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(ExpectedResult)}`");
+			}
+        }
+
 		static Serialize()
 		{
-			MsgPackRegistry.GetOrCreateSerializerMethod(typeof(Dictionary<string, string>));
-			MsgPackRegistry.GetOrCreateSerializerMethod(typeof(string[]));
+			MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>));
+			MsgPackRegistry.GetOrCreateSerializer(typeof(string[]));
 		}
 
 		[TestMethod]
 		public void _Dummy()
 		{
-			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializerMethod(typeof(Dictionary<string, string>)) != null);
-			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializerMethod(typeof(string[])) != null);
+			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>)) != null);
+			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializer(typeof(string[])) != null);
 		}
 
 		[TestMethod]
 		public void SerializeIntegers()
 		{
-			Tuple<int, byte[]>[] tests = new Tuple<int, byte[]>[]
-			{
-				new Tuple<int, byte[]>(1, new byte[] { 0x01 }),
-				new Tuple<int, byte[]>(-1, new byte[] { 0xFF }),
-				new Tuple<int, byte[]>(-2, new byte[] { 0xFE }),
-				new Tuple<int, byte[]>(-128, new byte[] { 0xD0, 0x80 }),
-				new Tuple<int, byte[]>(-129, new byte[] { 0xD1, 0xFF, 0x7F }),
+            SerializeTest<int>[] tests =
+            {
+				new SerializeTest<int>(1, new byte[] { 0x01 }),
+				new SerializeTest<int>(-1, new byte[] { 0xFF }),
+				new SerializeTest<int>(-2, new byte[] { 0xFE }),
+				new SerializeTest<int>(-128, new byte[] { 0xD0, 0x80 }),
+				new SerializeTest<int>(-129, new byte[] { 0xD1, 0xFF, 0x7F }),
 				
 			};
 
 			for (int i = 0; i < tests.Length; ++i)
 			{
-				var value = tests[i];
+				var test = tests[i];
 
 				MsgPackSerializer serializer = new MsgPackSerializer();
-				serializer.Serialize(value.Item1);
-				byte[] result = serializer.ToArray();
-				Assert.IsTrue(result.SequenceEqual(value.Item2), $"{value.Item1} is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(value.Item2)}`");
+				serializer.Serialize(test.Input);
+				test.AssertValidate(serializer);
 			}
 		}
 
@@ -52,19 +70,17 @@ namespace MsgPack.Tests
 		{
 			{
 				MsgPackSerializer serializer = new MsgPackSerializer();
-				serializer.Serialize(9999.2312312f);
-				byte[] result = serializer.ToArray();
-				byte[] expect = new byte[] { 0xCA, 0x46, 0x1C, 0x3C, 0xED };
-				Assert.IsTrue(result.SequenceEqual(expect), $"9999.2312312f is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(expect)}`");
-			}
+				var test = new SerializeTest<float>(9999.2312312f, new byte[] { 0xCA, 0x46, 0x1C, 0x3C, 0xED });
+				serializer.Serialize(test.Input);
+                test.AssertValidate(serializer);
+            }
 
 			{
 				MsgPackSerializer serializer = new MsgPackSerializer();
-				serializer.Serialize(123456.455463);
-				byte[] result = serializer.ToArray();
-				byte[] expect = new byte[] { 0xCB, 0x40, 0xFE, 0x24, 0x07, 0x49, 0x93, 0x92, 0x19 };
-				Assert.IsTrue(result.SequenceEqual(expect), $"123456.455463 is incorrectly serialized, got: `{BitConverter.ToString(result)}`, expected: `{BitConverter.ToString(expect)}`");
-			}
+                var test = new SerializeTest<double>(123456.455463, new byte[] { 0xCB, 0x40, 0xFE, 0x24, 0x07, 0x49, 0x93, 0x92, 0x19 });
+                serializer.Serialize(test.Input);
+                test.AssertValidate(serializer);
+            }
 		}
 
 		[TestMethod]

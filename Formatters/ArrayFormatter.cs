@@ -56,7 +56,7 @@ namespace MsgPack.Formatters
 							g.Emit(OpCodes.Ldarg_1);
 							g.Emit(OpCodes.Ldloc_1);
 							g.Emit(OpCodes.Ldelem, type);
-							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateSerializerMethod(type), null);
+							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateSerializer(type), null);
 
 							// ++i
 							g.Emit(OpCodes.Ldloc_1);

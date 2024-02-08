@@ -1,4 +1,6 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using FastSerialization;
+using Microsoft.Diagnostics.Runtime;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 
 namespace MsgPack.Tests
@@ -6,9 +8,23 @@ namespace MsgPack.Tests
 	[TestClass]
 	public class Deserialize
 	{
+		private delegate TResult TypeDeserializer<out TResult>(ref MsgPackDeserializer arg);
+
+		private T CallMethod<T>(ref MsgPackDeserializer deserializer)
+		{
+			if (MsgPackRegistry.TryGetDeserializer(typeof(T), out var deserializeMethod))
+				return ((TypeDeserializer<T>)deserializeMethod.m_method.CreateDelegate(typeof(TypeDeserializer<T>)))(ref deserializer);
+			
+			Assert.Fail();
+			return default;
+		}
+
 		static Deserialize()
 		{
-			MsgPackRegistry.GetOrCreateDeserializerMethod(typeof(Player));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Player));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector2));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector3));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector4));
 		}
 
 		[TestMethod]
@@ -23,6 +39,9 @@ namespace MsgPack.Tests
 				0xc2,
 				0xc3,
 				0xcc, 0xFE,
+				0xc7, 12, 21, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x40,
+				0xc7, 8, 20, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40,
+				0xc7, 16, 22, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x40, 0x00, 0x00, 0x80, 0x40,
 			};
 
 			fixed (byte* ptr = input)
@@ -40,33 +59,38 @@ namespace MsgPack.Tests
 				else
 					Assert.Fail();
 
-
-				void MsgPackConversionInvoke(short a, object b, int c, byte d, uint e, ulong f, Player player)
+				// Deserialize
 				{
-					Assert.AreEqual((short)7, a);
-					Assert.AreEqual(254L, ((IConvertible)b).ToInt64(null));
-					Assert.AreEqual(16_909_060, c);
-					Assert.AreEqual((byte)0, d);
-					Assert.AreEqual(0u, e);
-					Assert.AreEqual(1uL, f);
-					Assert.AreEqual(player?.m_id, 254u);
-				}
+					Assert.AreEqual((short)7,
+						(short)deserializer.DeserializeToInt32());
 
-				if (MsgPackRegistry.TryGetDeserializer(typeof(Player), out var methods))
-				{
-					var a = (short)deserializer.DeserializeToInt32();
-					var b = deserializer.Deserialize();
-					var c = deserializer.DeserializeToInt32();
-					var d = (byte)deserializer.DeserializeToUInt32();
-					var e = deserializer.DeserializeToUInt32();
-					var f = deserializer.DeserializeToUInt64();
-					var g = methods.m_dynamic(ref deserializer);
-					var player = g as Player;
+					Assert.AreEqual(254L,
+						((IConvertible)deserializer.Deserialize()).ToInt64(null));
 
-					MsgPackConversionInvoke(a, b, c, d, e, f, player);
+					Assert.AreEqual(16_909_060,
+						deserializer.DeserializeToInt32());
+
+					Assert.AreEqual((byte)0,
+						(byte)deserializer.DeserializeToUInt32());
+
+					Assert.AreEqual(0u,
+						deserializer.DeserializeToUInt32());
+
+					Assert.AreEqual(1uL,						
+						deserializer.DeserializeToUInt64());
+
+					Assert.AreEqual(254u,
+						CallMethod<Player>(ref deserializer)?.m_id);
+
+					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f),
+						CallMethod<Vector3>(ref deserializer));
+
+					Assert.AreEqual(new Vector2(1.0f, 2.0f),
+						CallMethod<Vector2>(ref deserializer));
+
+					Assert.AreEqual(new Vector4(1.0f, 2.0f, 3.0f, 4.0f),
+						CallMethod<Vector4>(ref deserializer));
 				}
-				else
-					Assert.Fail();
 			}
 		}
 	}

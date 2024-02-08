@@ -2,6 +2,7 @@
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
+using MsgPack.Tests;
 using System;
 using System.Collections.Generic;
 
@@ -14,8 +15,8 @@ namespace MsgPack
 		[GlobalSetup]
 		public void Setup()
 		{
-			MsgPackRegistry.GetOrCreateSerializerMethod(typeof(Dictionary<string, string>));
-			MsgPackRegistry.GetOrCreateSerializerMethod(typeof(string[]));
+			MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>));
+			MsgPackRegistry.GetOrCreateSerializer(typeof(string[]));
 		}
 
 		[Benchmark(Description = "thorium Serialize(int)", OperationsPerInvoke = 5 * Iterations)]

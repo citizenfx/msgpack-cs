@@ -21,6 +21,8 @@
             this.y = y;
             this.z = z;
         }
+
+        public string ToString() => $"{nameof(Vector3)}({x}, {y}, {z})";
     }
 
     public struct Vector4

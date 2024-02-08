@@ -69,13 +69,13 @@ namespace MsgPack.Formatters
 							g.Emit(OpCodes.Ldarg_0);
 							g.Emit(OpCodes.Ldloca_S, (byte)1);
 							g.EmitCall(OpCodes.Call, typeKeyValuePair.GetProperty("Key", Type.EmptyTypes).GetMethod, null);
-							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateSerializerMethod(typeKey), null);
+							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateSerializer(typeKey), null);
 
 							// serialize .Value
 							g.Emit(OpCodes.Ldarg_0);
 							g.Emit(OpCodes.Ldloca_S, (byte)1);
 							g.EmitCall(OpCodes.Call, typeKeyValuePair.GetProperty("Value", Type.EmptyTypes).GetMethod, null);
-							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateSerializerMethod(typeValue), null);
+							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateSerializer(typeValue), null);
 
 							// enumerator.MoveNext() condition
 							g.MarkLabel(whileCond);

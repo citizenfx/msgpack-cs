@@ -65,6 +65,7 @@ namespace MsgPack
 			DynamicMethod dynamicMethod = new DynamicMethod(method.DeclaringType.Name,
 				typeof(object), new[] { typeof(MsgPackDeserializer).MakeByRefType() }, typeof(Deserializer).Module, true);
 			var g = dynamicMethod.GetILGenerator();
+
 			g.Emit(OpCodes.Ldarg_0);
 			g.EmitCall(OpCodes.Call, method, null);
 			g.Emit(OpCodes.Box, method.ReturnType);
@@ -179,14 +180,14 @@ namespace MsgPack
 				: CreateSerializer(type)?.Item2.m_dynamic;
 		}
 
-		internal static MethodInfo GetOrCreateSerializerMethod(Type type)
+		internal static MethodInfo GetOrCreateSerializer(Type type)
 		{
 			return TryGetSerializer(type, out var methodInfo)
 				? methodInfo.m_method
 				: CreateSerializer(type)?.Item1.m_method;
 		}
 
-		internal static MethodInfo GetOrCreateDeserializerMethod(Type type)
+		internal static MethodInfo GetOrCreateDeserializer(Type type)
 		{
 			return TryGetDeserializer(type, out var methodInfo)
 				? methodInfo.m_method
@@ -225,7 +226,7 @@ namespace MsgPack
 			}
 			else if (type.IsValueType)
 			{
-
+				return TypeFormatter.Build(type);
 			}
 			else
 				return TypeFormatter.Build(type);
