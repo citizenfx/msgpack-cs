@@ -34,7 +34,7 @@ namespace MsgPack.Formatters
 			UInt8, UInt16, UInt32, UInt64,
 			Int8, Int16, Int32, Int64,
 			FixExt1, FixExt2, FixExt4, FixExt8, FixExt16,
-			//Str8, Str16, Str32,
+			Str8, Str16, Str32,
 			//Array8, Array16, Array32,
 			//Map16, Map32,
 
@@ -129,47 +129,49 @@ namespace MsgPack.Formatters
 						type, new[] { typeof(MsgPackDeserializer).MakeByRefType() });
 					{
 						ConstructorChoice[] constructors = SelectConstructors(type);
+						ConstructorInfo constructorString = type.GetConstructor(new Type[] { typeof(string) });
 
 						var g = methodDeserialize.GetILGenerator();
 						g.DeclareLocal(typeof(byte));
 						g.DeclareLocal(typeof(uint));
 
-						Label lblFixIntPositive = g.DefineLabel(), lblFixIntNegative = g.DefineLabel();
+						Label lblFixIntPositive = g.DefineLabel(),
+							lblFixIntNegative = g.DefineLabel(),
+							lblDefault = g.DefineLabel();
+
 						Label[] labels = new Label[(uint)JumpLabels.Count];
-
 						for (uint i = 0; i < labels.Length; ++i)
-						{
 							labels[i] = g.DefineLabel();
-						}
 
-						g.Emit(OpCodes.Ldarg_0);
-						g.EmitCall(OpCodes.Call, ((GetMethod<byte>)MsgPackDeserializer.ReadByte).Method, null);
-						g.Emit(OpCodes.Stloc_0);
+						LoadSize(g, ((GetMethod<byte>)MsgPackDeserializer.ReadByte).Method, OpCodes.Stloc_0);
 
 						// < 0x80 positive fixint
 						g.Emit(OpCodes.Ldloc_0);
 						g.Emit(OpCodes.Ldc_I4, 0x80);
-						g.Emit(OpCodes.Blt_S, lblFixIntPositive);
+						g.Emit(OpCodes.Blt, lblFixIntPositive);
 
 						// > 0xDF negative fixint
 						g.Emit(OpCodes.Ldloc_0);
 						g.Emit(OpCodes.Ldc_I4, 0xDF);
-						g.Emit(OpCodes.Bgt_S, lblFixIntNegative);
+						g.Emit(OpCodes.Bgt, lblFixIntNegative);
 
 						// jump-table / switch(type - 0xc0)
 						g.Emit(OpCodes.Ldloc_0);
-						g.Emit(OpCodes.Ldc_I4, (int)JumpLabels.First);
+						g.Emit(OpCodes.Ldc_I4, (uint)JumpLabels.First);
 						g.Emit(OpCodes.Sub);
 						g.Emit(OpCodes.Switch, labels);
 
-						// can we put the default here?
-						g.MarkLabel(labels[(uint)JumpLabels.Unused_0xC1]);
-						g.MarkLabel(labels[(uint)JumpLabels.Bin8]);
-						g.MarkLabel(labels[(uint)JumpLabels.Bin16]);
-						g.MarkLabel(labels[(uint)JumpLabels.Bin32]);
+						// default, and non existing construction options
+						{
+							g.MarkLabel(lblDefault);
+							g.MarkLabel(labels[(uint)JumpLabels.Unused_0xC1]);
+							g.MarkLabel(labels[(uint)JumpLabels.Bin8]);
+							g.MarkLabel(labels[(uint)JumpLabels.Bin16]);
+							g.MarkLabel(labels[(uint)JumpLabels.Bin32]);
 
-						g.Emit(OpCodes.Newobj, typeof(InvalidCastException).GetConstructor(Type.EmptyTypes));
-						g.Emit(OpCodes.Throw);
+							g.Emit(OpCodes.Newobj, typeof(InvalidCastException).GetConstructor(Type.EmptyTypes));
+							g.Emit(OpCodes.Throw);
+						}
 
 						var c = constructors[(uint)ConstructorOptions.Int].Key;
 						if (c != null)
@@ -193,8 +195,7 @@ namespace MsgPack.Formatters
 						{
 							g.MarkLabel(lblFixIntPositive);
 							g.MarkLabel(lblFixIntNegative);
-							g.Emit(OpCodes.Newobj, typeof(InvalidCastException).GetConstructor(Type.EmptyTypes));
-							g.Emit(OpCodes.Throw);
+							g.Emit(OpCodes.Br, lblDefault);
 						}
 
 						// case 0xc0: null
@@ -210,88 +211,102 @@ namespace MsgPack.Formatters
 							g.Emit(OpCodes.Ret);
 						}
 
-						// case 0xc2: false
-						g.MarkLabel(labels[(uint)JumpLabels.False]);
-						SwitchCase(g, OpCodes.Ldc_I4_0, constructors[(uint)ConstructorOptions.Bool]);
+						SwitchCase(labels[(uint)JumpLabels.False], g, OpCodes.Ldc_I4_0, constructors[(uint)ConstructorOptions.Bool], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.True], g, OpCodes.Ldc_I4_1, constructors[(uint)ConstructorOptions.Bool], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.Float32], g, ((GetMethod<float>)MsgPackDeserializer.ReadSingle).Method, constructors[(uint)ConstructorOptions.Float32], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.Float64], g, ((GetMethod<double>)MsgPackDeserializer.ReadDouble).Method, constructors[(uint)ConstructorOptions.Float64], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.UInt8], g, ((GetMethod<byte>)MsgPackDeserializer.ReadUInt8).Method, constructors[(uint)ConstructorOptions.UInt], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.UInt16], g, ((GetMethod<ushort>)MsgPackDeserializer.ReadUInt16).Method, constructors[(uint)ConstructorOptions.UInt], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.UInt32], g, ((GetMethod<uint>)MsgPackDeserializer.ReadUInt32).Method, constructors[(uint)ConstructorOptions.UInt], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.UInt64], g, ((GetMethod<ulong>)MsgPackDeserializer.ReadUInt64).Method, constructors[(uint)ConstructorOptions.UInt], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.Int8], g, ((GetMethod<sbyte>)MsgPackDeserializer.ReadInt8).Method, constructors[(uint)ConstructorOptions.Int], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.Int16], g, ((GetMethod<short>)MsgPackDeserializer.ReadInt16).Method, constructors[(uint)ConstructorOptions.Int], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.Int32], g, ((GetMethod<int>)MsgPackDeserializer.ReadInt32).Method, constructors[(uint)ConstructorOptions.Int], lblDefault);
+						SwitchCase(labels[(uint)JumpLabels.Int64], g, ((GetMethod<long>)MsgPackDeserializer.ReadInt64).Method, constructors[(uint)ConstructorOptions.Int], lblDefault);
 
-						// case 0xc3: true
-						g.MarkLabel(labels[(uint)JumpLabels.True]);
-						SwitchCase(g, OpCodes.Ldc_I4_1, constructors[(uint)ConstructorOptions.Bool]);
+						// Extra types
+						{
+							Label extraType = g.DefineLabel();
 
-						// case 0xc7: Extra 8 bit
-						g.MarkLabel(labels[(uint)JumpLabels.Ext8]);
-						SwitchCaseExtraType(g, ((GetMethod<byte>)MsgPackDeserializer.ReadUInt8).Method, type);
+							// case 0xc7: Extra 8 bit
+							g.MarkLabel(labels[(uint)JumpLabels.Ext8]);
+							LoadSize(g, ((GetMethod<byte>)MsgPackDeserializer.ReadUInt8).Method, OpCodes.Stloc_1);
+							g.Emit(OpCodes.Br, extraType);
 
-						// case 0xc8: Extra 16 bit
-						g.MarkLabel(labels[(uint)JumpLabels.Ext16]);
-						SwitchCaseExtraType(g, ((GetMethod<ushort>)MsgPackDeserializer.ReadUInt16).Method, type);
+							// case 0xc8: Extra 16 bit
+							g.MarkLabel(labels[(uint)JumpLabels.Ext16]);
+							LoadSize(g, ((GetMethod<ushort>)MsgPackDeserializer.ReadUInt16).Method, OpCodes.Stloc_1);
+							g.Emit(OpCodes.Br, extraType);
 
-						// case 0xc9: Extra 32 bit
-						g.MarkLabel(labels[(uint)JumpLabels.Ext32]);
-						SwitchCaseExtraType(g, ((GetMethod<uint>)MsgPackDeserializer.ReadUInt32).Method, type);
+							// case 0xc9: Extra 32 bit
+							g.MarkLabel(labels[(uint)JumpLabels.Ext32]);
+							LoadSize(g, ((GetMethod<uint>)MsgPackDeserializer.ReadUInt32).Method, OpCodes.Stloc_1);
+							g.Emit(OpCodes.Br, extraType);
 
-						// case 0xca: float32
-						g.MarkLabel(labels[(uint)JumpLabels.Float32]);
-						SwitchCase(g, ((GetMethod<float>)MsgPackDeserializer.ReadSingle).Method, constructors[(uint)ConstructorOptions.Float32]);
+							// case 0xd4: fixed extension type
+							g.MarkLabel(labels[(uint)JumpLabels.FixExt1]);
+							LoadSize(g, 1, OpCodes.Stloc_1);
+							g.Emit(OpCodes.Br, extraType);
 
-						// case 0xcb: float64
-						g.MarkLabel(labels[(uint)JumpLabels.Float64]);
-						SwitchCase(g, ((GetMethod<double>)MsgPackDeserializer.ReadDouble).Method, constructors[(uint)ConstructorOptions.Float64]);
+							// case 0xd5: fixed size extension type
+							g.MarkLabel(labels[(uint)JumpLabels.FixExt2]);
+							LoadSize(g, 2, OpCodes.Stloc_1);
+							g.Emit(OpCodes.Br, extraType);
 
-						// case 0xcc: uint8
-						g.MarkLabel(labels[(uint)JumpLabels.UInt8]);
-						SwitchCase(g, ((GetMethod<byte>)MsgPackDeserializer.ReadUInt8).Method, constructors[(uint)ConstructorOptions.UInt]);
+							// case 0xd6: fixed size extension type
+							g.MarkLabel(labels[(uint)JumpLabels.FixExt4]);
+							LoadSize(g, 4, OpCodes.Stloc_1);
+							g.Emit(OpCodes.Br, extraType);
 
-						// case 0xcd: uint16
-						g.MarkLabel(labels[(uint)JumpLabels.UInt16]);
-						SwitchCase(g, ((GetMethod<ushort>)MsgPackDeserializer.ReadUInt16).Method, constructors[(uint)ConstructorOptions.UInt]);
+							// case 0xd7: fixed size extension type
+							g.MarkLabel(labels[(uint)JumpLabels.FixExt8]);
+							LoadSize(g, 8, OpCodes.Stloc_1);
+							g.Emit(OpCodes.Br, extraType);
 
-						// case 0xce: uint32
-						g.MarkLabel(labels[(uint)JumpLabels.UInt32]);
-						SwitchCase(g, ((GetMethod<uint>)MsgPackDeserializer.ReadUInt32).Method, constructors[(uint)ConstructorOptions.UInt]);
+							// case 0xd8: fixed size extension type
+							g.MarkLabel(labels[(uint)JumpLabels.FixExt16]);
+							LoadSize(g, 16, OpCodes.Stloc_1);
 
-						// case 0xcf: uint64
-						g.MarkLabel(labels[(uint)JumpLabels.UInt64]);
-						SwitchCase(g, ((GetMethod<ulong>)MsgPackDeserializer.ReadUInt64).Method, constructors[(uint)ConstructorOptions.UInt]);
+							g.MarkLabel(extraType);
+							SwitchCaseExtraType(g, type, lblDefault);
+						}
 
-						// case 0xd0: int8
-						g.MarkLabel(labels[(uint)JumpLabels.Int8]);
-						SwitchCase(g, ((GetMethod<sbyte>)MsgPackDeserializer.ReadInt8).Method, constructors[(uint)ConstructorOptions.Int]);
+						if (constructorString != null)
+						{
+							Label stringType = g.DefineLabel();
 
-						// case 0xd1: int16
-						g.MarkLabel(labels[(uint)JumpLabels.Int16]);
-						SwitchCase(g, ((GetMethod<short>)MsgPackDeserializer.ReadInt16).Method, constructors[(uint)ConstructorOptions.Int]);
+							// case 0xd9: string  with 8 byte sized length
+							g.MarkLabel(labels[(uint)JumpLabels.Str8]);
+							g.Emit(OpCodes.Ldarg_0);
+							g.EmitCall(OpCodes.Call, ((GetMethod<byte>)MsgPackDeserializer.ReadByte).Method, null);
+							g.Emit(OpCodes.Br, stringType);
 
-						// case 0xd2: int32
-						g.MarkLabel(labels[(uint)JumpLabels.Int32]);
-						SwitchCase(g, ((GetMethod<int>)MsgPackDeserializer.ReadInt32).Method, constructors[(uint)ConstructorOptions.Int]);
+							// case 0xda: string  with 16 byte sized length
+							g.MarkLabel(labels[(uint)JumpLabels.Str16]);
+							g.Emit(OpCodes.Ldarg_0);
+							g.EmitCall(OpCodes.Call, ((GetMethod<ushort>)MsgPackDeserializer.ReadUInt16).Method, null);
+							g.Emit(OpCodes.Br, stringType);
 
-						// case 0xd3: int64
-						g.MarkLabel(labels[(uint)JumpLabels.Int64]);
-						SwitchCase(g, ((GetMethod<long>)MsgPackDeserializer.ReadInt64).Method, constructors[(uint)ConstructorOptions.Int]);
+							// case 0xdb: string  with 32 byte sized length
+							g.MarkLabel(labels[(uint)JumpLabels.Str32]);
+							g.Emit(OpCodes.Ldarg_0);
+							g.EmitCall(OpCodes.Call, ((GetMethod<uint>)MsgPackDeserializer.ReadUInt32).Method, null);
 
-						// case 0xd4: fixed extension type
-						g.MarkLabel(labels[(uint)JumpLabels.FixExt1]);
-						SwitchCaseExtraType(g, 1, type);
-
-						// case 0xd5: fixed size extension type
-						g.MarkLabel(labels[(uint)JumpLabels.FixExt2]);
-						SwitchCaseExtraType(g, 2, type);
-
-						// case 0xd6: fixed size extension type
-						g.MarkLabel(labels[(uint)JumpLabels.FixExt4]);
-						SwitchCaseExtraType(g, 4, type);
-
-						// case 0xd7: fixed size extension type
-						g.MarkLabel(labels[(uint)JumpLabels.FixExt8]);
-						SwitchCaseExtraType(g, 8, type);
-
-						// case 0xd8: fixed size extension type
-						g.MarkLabel(labels[(uint)JumpLabels.FixExt16]);
-						SwitchCaseExtraType(g, 16, type);
-
-						g.Emit(OpCodes.Ret);
+							g.MarkLabel(stringType);
+							g.Emit(OpCodes.Ldarg_0);
+							g.EmitCall(OpCodes.Call, ((GetMethod<string, uint>)MsgPackDeserializer.ReadString).Method, null);
+							g.Emit(OpCodes.Newobj, constructorString);
+							g.Emit(OpCodes.Ret);
+						}
+						else
+						{
+							g.MarkLabel(labels[(uint)JumpLabels.Str8]);
+							g.MarkLabel(labels[(uint)JumpLabels.Str16]);
+							g.MarkLabel(labels[(uint)JumpLabels.Str32]);
+							g.Emit(OpCodes.Br, lblDefault);
+						}
 					}
+
 
 					MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("SerializeObject", MethodAttributes.Public | MethodAttributes.Static,
 						typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
@@ -567,8 +582,25 @@ namespace MsgPack.Formatters
 			return result;
 		}
 
-		private static void SwitchCase(ILGenerator g, OpCode op0, ConstructorChoice constructor)
+		private static void LoadSize(ILGenerator g, byte size, OpCode storeLoc)
 		{
+			// size
+			g.Emit(OpCodes.Ldc_I4_S, size);
+			g.Emit(storeLoc);
+		}
+
+		private static void LoadSize(ILGenerator g, MethodInfo methodReadInteger, OpCode storeLoc)
+		{
+			// size
+			g.Emit(OpCodes.Ldarg_0);
+			g.Emit(OpCodes.Call, methodReadInteger);
+			g.Emit(storeLoc);
+		}
+
+		private static void SwitchCase(Label label, ILGenerator g, OpCode op0, ConstructorChoice constructor, Label defaultLabel)
+		{
+			g.MarkLabel(label);
+
 			if (constructor.Key != null)
 			{
 				g.Emit(op0);
@@ -576,14 +608,14 @@ namespace MsgPack.Formatters
 				g.Emit(OpCodes.Ret);
 			}
 			else
-			{
-				g.Emit(OpCodes.Newobj, typeof(InvalidCastException).GetConstructor(Type.EmptyTypes));
-				g.Emit(OpCodes.Throw);
-			}
+				g.Emit(OpCodes.Br, defaultLabel);
+
 		}
 
-		private static void SwitchCase(ILGenerator g, MethodInfo readMethod, ConstructorChoice constructor)
+		private static void SwitchCase(Label label, ILGenerator g, MethodInfo readMethod, ConstructorChoice constructor, Label defaultLabel)
 		{
+			g.MarkLabel(label);
+
 			if (constructor.Key != null)
 			{
 				g.Emit(OpCodes.Ldarg_0);
@@ -593,33 +625,10 @@ namespace MsgPack.Formatters
 				g.Emit(OpCodes.Ret);
 			}
 			else
-			{
-				g.Emit(OpCodes.Newobj, typeof(InvalidCastException).GetConstructor(Type.EmptyTypes));
-				g.Emit(OpCodes.Throw);
-			}
+				g.Emit(OpCodes.Br, defaultLabel);
 		}
 
-		private static void SwitchCaseExtraType(ILGenerator g, byte size, Type type)
-		{
-			// size
-			g.Emit(OpCodes.Ldc_I4_S, size);
-			g.Emit(OpCodes.Stloc_1);
-
-			SwitchCaseExtraTypeBody(g, type);
-		}
-
-		private static void SwitchCaseExtraType(ILGenerator g, MethodInfo methodReadInteger, Type type)
-		{
-			// size
-			g.Emit(OpCodes.Ldarg_0);
-			g.Emit(OpCodes.Call, methodReadInteger);
-			g.Emit(OpCodes.Stloc_1);
-
-			SwitchCaseExtraTypeBody(g, type);
-		}
-
-
-		private static void SwitchCaseExtraTypeBody(ILGenerator g, Type type)
+		private static void SwitchCaseExtraType(ILGenerator g, Type type, Label defaultLabel)
 		{
 			/*
 			g.MarkLabel(endLabel);
@@ -628,12 +637,12 @@ namespace MsgPack.Formatters
 
 			return;*/
 
-			Label isNot10Label = g.DefineLabel(), isNot11Label = g.DefineLabel(), endLabel = g.DefineLabel();
+							Label isNot10Label = g.DefineLabel(),
+				isNot11Label = g.DefineLabel();
+
 			Label[] labels = new Label[(uint)JumpLabelsExtra.Count];
 			for (uint i = 0; i < labels.Length; ++i)
-			{
 				labels[i] = g.DefineLabel();
-			}
 
 			var methodReadString = ((GetMethod<string, uint>)MsgPackDeserializer.ReadString).Method;
 			var methodSkipString = ((GetMethodVoid<uint>)MsgPackDeserializer.SkipString).Method;
@@ -649,7 +658,7 @@ namespace MsgPack.Formatters
 			// case 10: RemoteFunc
 			g.Emit(OpCodes.Ldloc_0);
 			g.Emit(OpCodes.Ldc_I4_S, (byte)10);
-			g.Emit(OpCodes.Bne_Un_S, isNot10Label);
+			g.Emit(OpCodes.Bne_Un, isNot10Label);
 			if ((constructor = type.GetConstructor(new Type[] { typeof(Callback) })) != null)
 			{
 				g.Emit(OpCodes.Ldarg_0);
@@ -663,14 +672,14 @@ namespace MsgPack.Formatters
 				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Ldloc_1);
 				g.EmitCall(OpCodes.Call, methodSkipString, null);
-				g.Emit(OpCodes.Br, endLabel);
+				g.Emit(OpCodes.Br, defaultLabel);
 			}
 
 			// case 11: LocalFunc
 			g.MarkLabel(isNot10Label);
 			g.Emit(OpCodes.Ldloc_0);
 			g.Emit(OpCodes.Ldc_I4_S, (byte)11);
-			g.Emit(OpCodes.Bne_Un_S, isNot11Label);
+			g.Emit(OpCodes.Bne_Un, isNot11Label);
 			if ((constructor = type.GetConstructor(new Type[] { typeof(Callback) })) != null)
 			{
 				g.Emit(OpCodes.Ldarg_0);
@@ -684,7 +693,7 @@ namespace MsgPack.Formatters
 				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Ldloc_1);
 				g.EmitCall(OpCodes.Call, methodSkipString, null);
-				g.Emit(OpCodes.Br, endLabel);
+				g.Emit(OpCodes.Br, defaultLabel);
 			}
 
 			// switch
@@ -693,7 +702,7 @@ namespace MsgPack.Formatters
 			g.Emit(OpCodes.Ldc_I4, (int)JumpLabelsExtra.First);
 			g.Emit(OpCodes.Sub);
 			g.Emit(OpCodes.Switch, labels);
-			g.Emit(OpCodes.Br, endLabel);
+			g.Emit(OpCodes.Br, defaultLabel);
 
 			// case 20: Vector2
 			g.MarkLabel(labels[(int)JumpLabelsExtra.Vector2]);
@@ -721,7 +730,7 @@ namespace MsgPack.Formatters
 			{
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, ((GetMethodVoid)MsgPackDeserializer.SkipVector2).Method, null);
-				g.Emit(OpCodes.Br, endLabel);
+				g.Emit(OpCodes.Br, defaultLabel);
 			}
 
 			// case 21: Vector3
@@ -729,18 +738,13 @@ namespace MsgPack.Formatters
 
 			if ((constructor = type.GetConstructor(new Type[] { typeof(float), typeof(float), typeof(float) })) != null)
 			{
-				g.DeclareLocal(typeof(Vector3));
-
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, methodReadSingle, null);
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, methodReadSingle, null);
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, methodReadSingle, null);
-
 				g.Emit(OpCodes.Newobj, constructor);
-				g.EmitWriteLine(constructor.ToString());
-
 				g.Emit(OpCodes.Ret);
 			}
 			else if ((constructor = type.GetConstructor(new Type[] { typeof(Vector3) })) != null)
@@ -753,7 +757,7 @@ namespace MsgPack.Formatters
 			{
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, ((GetMethodVoid)MsgPackDeserializer.SkipVector3).Method, null);
-				g.Emit(OpCodes.Br, endLabel);
+				g.Emit(OpCodes.Br, defaultLabel);
 			}
 
 			// case 22: Vector4
@@ -790,7 +794,7 @@ namespace MsgPack.Formatters
 			{
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, ((GetMethodVoid)MsgPackDeserializer.SkipVector4).Method, null);
-				g.Emit(OpCodes.Br, endLabel);
+				g.Emit(OpCodes.Br, defaultLabel);
 			}
 
 			// case 23: Quaternion
@@ -827,13 +831,8 @@ namespace MsgPack.Formatters
 			{
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, ((GetMethodVoid)MsgPackDeserializer.SkipQuaternion).Method, null);
-				g.Emit(OpCodes.Br, endLabel);
+				g.Emit(OpCodes.Br, defaultLabel);
 			}
-
-			// Can't create our type, throw exception
-			g.MarkLabel(endLabel);
-			g.Emit(OpCodes.Newobj, typeof(InvalidCastException).GetConstructor(Type.EmptyTypes));
-			g.Emit(OpCodes.Throw);
 		}
 	}
 }

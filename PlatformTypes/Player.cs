@@ -13,5 +13,6 @@ namespace MsgPack.Tests
 		public Player() => m_id = 0;
 		public Player(int id) => m_id = (uint)id;
 		public Player(uint id) => m_id = id;
+		public Player(string id) => m_id = uint.Parse(id);
 	}
 }
