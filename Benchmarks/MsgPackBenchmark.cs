@@ -2,6 +2,8 @@
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
+using FastSerialization;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MsgPack.Tests;
 using System;
 using System.Collections.Generic;
@@ -12,11 +14,28 @@ namespace MsgPack
 	{
 		public const int Iterations = 1_000_000;
 
+		static Deserialize.TypeDeserializer<Player> deserializePlayer;
+		static Deserialize.TypeDeserializer<Vector2> deserializeVector2;
+		static Deserialize.TypeDeserializer<Vector3> deserializeVector3;
+		static Deserialize.TypeDeserializer<Vector4> deserializeVector4;
+		static Deserialize.TypeDeserializer<Quaternion> deserializeQuaternion;
+
 		[GlobalSetup]
 		public void Setup()
 		{
 			MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>));
 			MsgPackRegistry.GetOrCreateSerializer(typeof(string[]));
+
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Player));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector2));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector3));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector4));
+
+			deserializePlayer = Deserialize.GetDelegate<Player>();
+			deserializeVector2 = Deserialize.GetDelegate<Vector2>();
+			deserializeVector3 = Deserialize.GetDelegate<Vector3>();
+			deserializeVector4 = Deserialize.GetDelegate<Vector4>();
+			//deserializeQuaternion = Deserialize.GetDelegate<Quaternion>();
 		}
 
 		[Benchmark(Description = "thorium Serialize(int)", OperationsPerInvoke = 5 * Iterations)]
@@ -142,6 +161,92 @@ namespace MsgPack
 					"hello4",
 					"hello5",
 				});
+			}
+		}
+
+		static byte[] input = new byte[] {
+			0x97, // fixarray
+			0x7,
+			0xcc, 0xFE,
+			0xd2, 0x01, 0x02, 0x03, 0x04,
+			0xc0,
+			0xc2,
+			0xc3,
+			0xcc, 0xFE,
+			0xc7, 12, 21, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x40,
+			0xc7, 8, 20, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40,
+			0xc7, 16, 22, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x40, 0x00, 0x00, 0x80, 0x40,
+			0xde, 0, 1, 0xd9, 4, (byte)'m', (byte)'_', (byte)'i', (byte)'d', 0xcc, 56,
+			0xde, 0, 1, 0xd9, 1, (byte)'x', 0xca, 0x3F, 0x80, 0x00, 0x00,
+		};
+
+		[Benchmark(Description = "thorium Deserialize Several", OperationsPerInvoke = Iterations)]
+		public unsafe void MessagePack_DeserializeSeveral()
+		{
+
+			for (int i = 0; i < Iterations; i++)
+			{
+				fixed (byte* ptr = input)
+				{
+					var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
+					byte type = deserializer.ReadByte();
+					uint length;
+
+					if (type >= 0x90 && type < 0xA0)
+						length = (uint)(type % 16);
+					else if (type == 0xDC)
+						length = deserializer.ReadUInt16();
+					else if (type == 0xDD)
+						length = deserializer.ReadUInt32();
+					else
+						Assert.Fail();
+
+					// Deserialize
+					{
+						deserializer.DeserializeToInt32();
+						deserializer.Deserialize();
+						deserializer.DeserializeToInt32();
+						deserializer.DeserializeToUInt32();
+						deserializer.DeserializeToUInt32();
+						deserializer.DeserializeToUInt64();
+						deserializePlayer(deserializer);
+						deserializeVector3(deserializer);
+						deserializeVector2(deserializer);
+						deserializeVector4(deserializer);
+						deserializePlayer(deserializer);
+						deserializeVector3(deserializer);
+						/*Deserialize.CallMethod<Player>(deserializer);
+						Deserialize.CallMethod<Vector3>(deserializer);
+						Deserialize.CallMethod<Vector2>(deserializer);
+						Deserialize.CallMethod<Vector4>(deserializer);
+						Deserialize.CallMethod<Player>(deserializer);
+						Deserialize.CallMethod<Vector3>(deserializer);*/
+					}
+				}
+			}
+		}
+
+		[Benchmark(Description = "MessagePack Deserialize Several", OperationsPerInvoke = Iterations)]
+		public unsafe void Custom_DeserializeSeveral()
+		{
+			for (int i = 0; i < Iterations; i++)
+			{
+				var reader = new MessagePack.MessagePackReader(input);
+				reader.ReadArrayHeader();
+
+				MessagePack.MessagePackSerializer.Deserialize<int>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<int>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<object>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<object>(ref reader); // nil, doesn't allow deserialization to integers
+				MessagePack.MessagePackSerializer.Deserialize<bool>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<bool>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<ulong>(ref reader);
+				/*MessagePack.MessagePackSerializer.Deserialize<Player>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<Vector3>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<Vector2>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<Vector4>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<Player>(ref reader);
+				MessagePack.MessagePackSerializer.Deserialize<Vector3>(ref reader);*/
 			}
 		}
 	}

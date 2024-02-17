@@ -12,13 +12,13 @@ namespace MsgPack.Benchmarks
 		{
 #pragma warning disable CS0162
 
-			//if (false)
+			if (false)
 			{
 				new Deserialize().DeserializeTest();
 				//SortingBenchmark.TestSorting();
 			}
 
-			if (false)
+			//if (false)
 			{
 				//var config = DefaultConfig.Instance.AddJob(Job.Default.WithRuntime(new MonoRuntime("Mono", "C:\\Program Files\\Mono\\bin\\mono.exe")).WithIterationCount(20));
 				var config = DefaultConfig.Instance.AddJob(Job.Default.WithIterationCount(20));

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Reflection;
 
-namespace MsgPack.Details
+namespace MsgPack.Detail
 {
 	internal class Helper
 	{

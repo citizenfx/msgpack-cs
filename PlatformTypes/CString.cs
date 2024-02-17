@@ -17,6 +17,9 @@ namespace MsgPack
 	{
 		internal readonly byte[] value;
 
+		[SecurityCritical]
+		private CString(byte[] str) => value = str;
+
 		public unsafe CString(string str)
 		{
 			fixed (char* c = str)
@@ -35,6 +38,24 @@ namespace MsgPack
 				else
 					value = null;
 			}
+		}
+
+		/// <summary>
+		/// CString with a copy of str, limited to given length.
+		/// </summary>
+		/// <returns>a null terminated CString or null if parameter str == null</returns>
+		[SecurityCritical]
+		internal static unsafe CString Create(byte* str, uint length)
+		{
+			if (str != null)
+			{
+				byte[] array = new byte[length + 1];
+				Marshal.Copy((IntPtr)str, array, 0, (int)length);
+
+				return new CString(array);
+			}
+
+			return null;
 		}
 
 		public static explicit operator CString(string str) => str != null ? new CString(str) : null;
@@ -111,5 +132,48 @@ namespace MsgPack
 
 			return (int)(s - dst);
 		}
+		
+		/// <summary>
+		/// Compares a CString to a C# string only considering ASCII characters (7 bits)
+		/// any non 7 bit characters on either side will return false
+		/// </summary>
+		/// <param name="str">string to compare</param>
+		/// <returns>true if both sides have equivalent characters in the ASCII character space</returns>
+		public bool CompareASCII(string str)
+		{
+			return CompareASCII(this, str);
+		}
+
+		/// <summary>
+		/// Compares a CString to a C# string only considering ASCII characters (7 bits)
+		/// any non 7 bit characters on either side will return false
+		/// </summary>
+		/// <param name="left">CString to compare</param>
+		/// <param name="right">string to compare</param>
+		/// <returns>true if both sides have equivalent characters in the ASCII character space</returns>
+		[SecuritySafeCritical]
+		public static unsafe bool CompareASCII(CString left, string right)
+		{
+			if (left == null && right == null)
+				return true;
+			else
+			{
+				fixed (byte* lPin = left.value)
+				fixed (char* rPin = right)
+				{
+					byte* l = lPin, lEnd = lPin + left.value.Length - 1;
+					char* r = rPin, rEnd = rPin + right.Length;
+					while (l < lEnd && r < rEnd)
+					{
+						char c1 = *r++;
+						if (c1 > 0x7F || c1 != *l++)
+							return false;
+					}
+				}
+
+				return true;
+			}
+		}
+
 	}
 }

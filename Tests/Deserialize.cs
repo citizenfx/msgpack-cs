@@ -6,9 +6,18 @@ namespace MsgPack.Tests
 	[TestClass]
 	public class Deserialize
 	{
-		private delegate TResult TypeDeserializer<out TResult>(in MsgPackDeserializer arg);
+		public delegate TResult TypeDeserializer<out TResult>(in MsgPackDeserializer arg);
 
-		private T CallMethod<T>(in MsgPackDeserializer deserializer)
+		public static TypeDeserializer<T> GetDelegate<T>()
+		{
+			if (MsgPackRegistry.TryGetDeserializer(typeof(T), out var deserializeMethod))
+				return (TypeDeserializer<T>)deserializeMethod.CreateDelegate(typeof(TypeDeserializer<T>));
+
+			Assert.Fail();
+			return default;
+		}
+
+		public static T CallMethod<T>(in MsgPackDeserializer deserializer)
 		{
 			if (MsgPackRegistry.TryGetDeserializer(typeof(T), out var deserializeMethod))
 				return ((TypeDeserializer<T>)deserializeMethod.CreateDelegate(typeof(TypeDeserializer<T>)))(deserializer);
@@ -40,6 +49,8 @@ namespace MsgPack.Tests
 				0xc7, 12, 21, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x40,
 				0xc7, 8, 20, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40,
 				0xc7, 16, 22, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x40, 0x00, 0x00, 0x80, 0x40,
+				0xde, 0, 1, 0xd9, 4, (byte)'m', (byte)'_', (byte)'i', (byte)'d', 0xcc, 56,
+				0xde, 0, 1, 0xd9, 1, (byte)'x', 0xca, 0x3F, 0x80, 0x00, 0x00,
 			};
 
 			fixed (byte* ptr = input)
@@ -74,7 +85,7 @@ namespace MsgPack.Tests
 					Assert.AreEqual(0u,
 						deserializer.DeserializeToUInt32());
 
-					Assert.AreEqual(1uL,						
+					Assert.AreEqual(1uL,
 						deserializer.DeserializeToUInt64());
 
 					Assert.AreEqual(254u,
@@ -88,8 +99,31 @@ namespace MsgPack.Tests
 
 					Assert.AreEqual(new Vector4(1.0f, 2.0f, 3.0f, 4.0f),
 						CallMethod<Vector4>(deserializer));
+
+					Assert.AreEqual(56u,
+						CallMethod<Player>(deserializer)?.m_id);
+
+					Assert.AreEqual(new Vector3(1.0f, 0.0f, 0.0f),
+						CallMethod<Vector3>(deserializer));
 				}
 			}
+
+			var reader = new MessagePack.MessagePackReader(input);
+			reader.ReadArrayHeader();
+
+			MessagePack.MessagePackSerializer.Deserialize<int>(ref reader);
+			MessagePack.MessagePackSerializer.Deserialize<int>(ref reader);
+			MessagePack.MessagePackSerializer.Deserialize<object>(ref reader);
+			MessagePack.MessagePackSerializer.Deserialize<object>(ref reader); // nil, doesn't allow deserialization to integers
+			MessagePack.MessagePackSerializer.Deserialize<bool>(ref reader);
+			MessagePack.MessagePackSerializer.Deserialize<bool>(ref reader);
+			MessagePack.MessagePackSerializer.Deserialize<ulong>(ref reader);
+			//MessagePack.MessagePackSerializer.Deserialize<Player>(ref reader);
+			//MessagePack.MessagePackSerializer.Deserialize<Vector3>(ref reader);
+			//MessagePack.MessagePackSerializer.Deserialize<Vector2>(ref reader);
+			//MessagePack.MessagePackSerializer.Deserialize<Vector4>(ref reader);
+			//MessagePack.MessagePackSerializer.Deserialize<Player>(ref reader);
+			//MessagePack.MessagePackSerializer.Deserialize<Vector3>(ref reader);
 		}
 	}
 }

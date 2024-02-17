@@ -186,8 +186,9 @@
     <Compile Include="Benchmarks\SortingBenchmark.cs" />
     <Compile Include="Benchmarks\Program.cs" />
     <Compile Include="Benchmarks\MsgPackBenchmark.cs" />
-    <Compile Include="Details\DynamicArray.cs" />
-    <Compile Include="Details\Helper.cs" />
+    <Compile Include="Detail\StringComparisonHelper.cs" />
+    <Compile Include="Detail\DynamicArray.cs" />
+    <Compile Include="Detail\Helper.cs" />
     <Compile Include="PlatformTypes\Callback.cs" />
     <Compile Include="PlatformTypes\CString.cs" />
     <Compile Include="Formatters\ArrayFormatter.cs" />

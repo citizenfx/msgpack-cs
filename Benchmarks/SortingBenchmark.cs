@@ -47,7 +47,7 @@ namespace MsgPack.Benchmarks
 
 			var array1 = new MemberInfo[s_members.Length];
 			Array.Copy(s_members, array1, s_members.Length);
-			var arr1 = new Details.DynamicArray<MemberInfo>(array1);
+			var arr1 = new Detail.DynamicArray<MemberInfo>(array1);
 			arr1.Sort((l, r) => l.MetadataToken - r.MetadataToken);
 
 			var arr2 = new MemberInfo[s_members.Length];
@@ -71,7 +71,7 @@ namespace MsgPack.Benchmarks
 		public void QuickSort()
 		{
 			Array.Copy(s_members, s_membersSameSize, s_members.Length);
-			var arr = new Details.DynamicArray<MemberInfo>(s_membersSameSize);
+			var arr = new Detail.DynamicArray<MemberInfo>(s_membersSameSize);
 			arr.Sort((l, r) => l.MetadataToken - r.MetadataToken);
 		}
 

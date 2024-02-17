@@ -376,6 +376,11 @@ namespace MsgPack
 			sbyte* v = (sbyte*)AdvancePointer(length);
 			return new string(v, 0, (int)length);
 		}
+		internal unsafe CString ReadCString(uint length)
+		{
+			byte* v = AdvancePointer(length);
+			return CString.Create(v, length);
+		}
 
 		internal unsafe void SkipString(uint length) => AdvancePointer(length);
 
@@ -504,10 +509,12 @@ namespace MsgPack
 
 		public static string ReadString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadString(length);
 		public static void SkipString(ref MsgPackDeserializer deserializer, uint length) => deserializer.SkipString(length);
+		public static CString ReadCString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadCString(length);
 		public static float ReadSingleLE(ref MsgPackDeserializer deserializer) => deserializer.ReadSingleLE();
 
 		public static object[] ReadObjectArray(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadObjectArray(length);
 
+		public static void SkipObject(ref MsgPackDeserializer deserializer) => deserializer.SkipObject();
 		public static void SkipVector2(ref MsgPackDeserializer deserializer) => deserializer.SkipVector2();
 		public static void SkipVector3(ref MsgPackDeserializer deserializer) => deserializer.SkipVector3();
 		public static void SkipVector4(ref MsgPackDeserializer deserializer) => deserializer.SkipVector4();

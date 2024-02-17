@@ -5,7 +5,8 @@ using System.Reflection;
 using ConstructorChoice = System.Collections.Generic.KeyValuePair<System.Reflection.ConstructorInfo, System.Reflection.Emit.OpCode>;
 using System.Linq;
 
-using static MsgPack.Details.Helper;
+using static MsgPack.Detail.Helper;
+using MsgPack.Detail;
 
 namespace MsgPack.Formatters
 {
@@ -37,8 +38,8 @@ namespace MsgPack.Formatters
 			Int8, Int16, Int32, Int64,
 			FixExt1, FixExt2, FixExt4, FixExt8, FixExt16,
 			Str8, Str16, Str32,
-			Array8, Array16, Array32,
-			//Map16, Map32,
+			Array16, Array32,
+			Map16, Map32,
 
 			Count,
 			First = 0xC0,
@@ -328,10 +329,11 @@ namespace MsgPack.Formatters
 			Layout layout = type.GetCustomAttribute<MsgPackSerializableAttribute>()?.Layout ?? Layout.Default;
 
 			var g = methodDeserialize.GetILGenerator();
-			g.DeclareLocal(typeof(byte));
-			g.DeclareLocal(typeof(uint));
+			g.DeclareLocal(typeof(uint)); // code and length
+			g.DeclareLocal(typeof(uint)); // size and i iterator
 			g.DeclareLocal(type);
 			g.DeclareLocal(typeof(MsgPackDeserializer.RestorePoint));
+			g.DeclareLocal(typeof(uint)); // sub size
 
 			Label lblFixIntPositive = g.DefineLabel(),
 				lblFixIntNegative = g.DefineLabel(),
@@ -358,6 +360,7 @@ namespace MsgPack.Formatters
 			g.Emit(OpCodes.Ldc_I4, (uint)JumpLabels.First);
 			g.Emit(OpCodes.Sub);
 			g.Emit(OpCodes.Switch, labels);
+
 
 			// default, and non existing construction options
 			{
@@ -422,14 +425,15 @@ namespace MsgPack.Formatters
 			SwitchCase(labels[(uint)JumpLabels.Int32], g, GetResultMethod(MsgPackDeserializer.ReadInt32), constructors[(uint)ConstructorOptions.Int], lblDefault);
 			SwitchCase(labels[(uint)JumpLabels.Int64], g, GetResultMethod(MsgPackDeserializer.ReadInt64), constructors[(uint)ConstructorOptions.Int], lblDefault);
 
-			BuildExtraTypesDeserializeBody(g, type, labels, lblDefault);
-			BuildStringDeserializeBody(g, type, labels, lblDefault);
-			BuildArrayDeserializeBody(g, type, layout, labels, lblDefault);
+			BuildDeserializeExtraTypesBody(g, type, labels, lblDefault);
+			BuildDeserializeStringBody(g, type, labels, lblDefault);
+			BuildDeserializeArrayBody(g, type, layout, labels, lblDefault);
+			BuildDeserializeMapBody(g, type, layout, labels, lblDefault);
 			
 			return methodDeserialize;
 		}
 
-		private static void BuildExtraTypesDeserializeBody(ILGenerator g, Type type, Label[] labels, Label defaultLabel)
+		private static void BuildDeserializeExtraTypesBody(ILGenerator g, Type type, Label[] labels, Label defaultLabel)
 		{
 			Label extraType = g.DefineLabel();
 
@@ -476,26 +480,26 @@ namespace MsgPack.Formatters
 			SwitchCaseExtraType(g, type, defaultLabel);
 		}
 
-		private static void BuildStringDeserializeBody(ILGenerator g, Type type, Label[] labels, Label defaultLabel)
+		private static void BuildDeserializeStringBody(ILGenerator g, Type type, Label[] labels, Label defaultLabel)
 		{
 			ConstructorInfo constructorString = type.GetConstructor(new Type[] { typeof(string) });
 			if (constructorString != null)
 			{
 				Label stringType = g.DefineLabel();
 
-				// case 0xd9: string  with 8 byte sized length
+				// case 0xd9: string with 8 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str8]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
 				g.Emit(OpCodes.Br, stringType);
 
-				// case 0xda: string  with 16 byte sized length
+				// case 0xda: string with 16 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str16]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
 				g.Emit(OpCodes.Br, stringType);
 
-				// case 0xdb: string  with 32 byte sized length
+				// case 0xdb: string with 32 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str32]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
@@ -515,14 +519,9 @@ namespace MsgPack.Formatters
 			}
 		}
 
-		private static void BuildArrayDeserializeBody(ILGenerator g, Type type, Layout layout, Label[] labels, Label defaultLabel)
+		private static void BuildDeserializeArrayBody(ILGenerator g, Type type, Layout layout, Label[] labels, Label defaultLabel)
 		{
 			Label objectArrayType = g.DefineLabel();
-
-			g.MarkLabel(labels[(uint)JumpLabels.Array8]);
-			g.Emit(OpCodes.Ldarg_0);
-			g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
-			g.Emit(OpCodes.Br, objectArrayType);
 
 			g.MarkLabel(labels[(uint)JumpLabels.Array16]);
 			g.Emit(OpCodes.Ldarg_0);
@@ -541,7 +540,7 @@ namespace MsgPack.Formatters
 			// Allow construction by arrays when the type is marked as indexed
 			if (layout == Layout.Indexed)
 			{
-				var members = new Details.DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
+				var members = new Detail.DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
 				members.RemoveAll(m => (m.MemberType & (MemberTypes.Field | MemberTypes.Property)) == 0
 					|| (m.GetCustomAttribute<IgnoreAttribute>() != null && m.GetCustomAttribute<IndexAttribute>() == null));
 				members.Sort((l, r) => (long)l.GetCustomAttribute<IndexAttribute>().Index - r.GetCustomAttribute<IndexAttribute>().Index);
@@ -635,6 +634,181 @@ namespace MsgPack.Formatters
 			}
 			else
 			{
+				g.Emit(OpCodes.Br, defaultLabel);
+			}
+		}
+
+		private static unsafe void BuildDeserializeMapBody(ILGenerator g, Type type, Layout layout, Label[] labels, Label defaultLabel)
+		{
+			ConstructorInfo constructor = type.GetConstructor(Type.EmptyTypes);
+			if (constructor != null || type.IsValueType)
+			{
+				var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
+				if (layout == Layout.Keyed)
+				{
+					members.RemoveAll(m => (m.MemberType & (MemberTypes.Field | MemberTypes.Property)) == 0
+						|| (m.GetCustomAttribute<IgnoreAttribute>() != null && m.GetCustomAttribute<KeyAttribute>() == null));
+				}
+				else
+				{
+					members.RemoveAll(m => (m.MemberType & (MemberTypes.Field | MemberTypes.Property)) == 0
+						|| (m.GetCustomAttribute<IgnoreAttribute>() != null));
+				}
+
+				members.Sort((l, r) => (l.Name.Length - r.Name.Length) * 1024 + l.Name.CompareTo(r.Name));
+
+				Label objectMapType = g.DefineLabel();
+
+				g.MarkLabel(labels[(uint)JumpLabels.Map16]);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
+				g.Emit(OpCodes.Br, objectMapType);
+
+				g.MarkLabel(labels[(uint)JumpLabels.Map32]);
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
+
+				g.MarkLabel(objectMapType);
+				g.Emit(OpCodes.Stloc_0);
+
+				// reset i
+				g.Emit(OpCodes.Ldc_I4_0);
+				g.Emit(OpCodes.Stloc_1);
+
+				// create object
+				if (type.IsValueType)
+				{
+					g.Emit(OpCodes.Ldloca_S, (byte)2);
+					g.Emit(OpCodes.Initobj, type);
+				}
+				else
+				{
+					g.Emit(OpCodes.Newobj, constructor);
+					g.Emit(OpCodes.Stloc_2);
+				}
+
+				// iterate key/values				
+				Label whileCond = g.DefineLabel();
+				Label whileLoop = g.DefineLabel();
+				g.Emit(OpCodes.Br, whileCond);
+				g.MarkLabel(whileLoop);
+
+				// load string
+				{
+					var lblStringCases = new Label[] { g.DefineLabel(), g.DefineLabel(), g.DefineLabel() };
+					
+					g.Emit(OpCodes.Ldarg_0);
+					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
+
+					g.Emit(OpCodes.Ldc_I4, (uint)MsgPackCode.Str8);
+					g.Emit(OpCodes.Sub);
+					g.Emit(OpCodes.Switch, lblStringCases);
+					g.Emit(OpCodes.Br, defaultLabel);
+
+					Label stringType = g.DefineLabel();
+					// case 0xd9: string  with 8 byte sized length
+					g.MarkLabel(lblStringCases[0]);
+					g.Emit(OpCodes.Ldarg_0);
+					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
+					g.Emit(OpCodes.Br, stringType);
+
+					// case 0xda: string  with 16 byte sized length
+					g.MarkLabel(lblStringCases[1]);
+					g.Emit(OpCodes.Ldarg_0);
+					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
+					g.Emit(OpCodes.Br, stringType);
+
+					// case 0xdb: string  with 32 byte sized length
+					g.MarkLabel(lblStringCases[2]);
+					g.Emit(OpCodes.Ldarg_0);
+					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
+
+					g.MarkLabel(stringType);
+					g.Emit(OpCodes.Stloc_S, (byte)4);
+
+					g.Emit(OpCodes.Ldarg_0);
+					g.Emit(OpCodes.Ldloc_S, (byte)4);
+					g.EmitCall(OpCodes.Call, GetResultMethod<uint, CString>(MsgPackDeserializer.ReadCString), null);
+				}
+
+				int memberLeft = 0, memberEnd = 0;
+				int memberCurSize = members[memberEnd].Name.Length, memberNextSize = memberCurSize;
+
+				while (memberEnd < members.Count)
+				{
+					// keep searching until we hit a name that's not of the same length
+					while (++memberEnd < members.Count && (memberNextSize = members[memberEnd].Name.Length) == memberCurSize) ;
+
+					Label lblSizeNotEqual = g.DefineLabel();
+					g.Emit(OpCodes.Ldloc_S, (byte)4);
+					g.Emit(OpCodes.Ldc_I4, memberCurSize);
+					g.Emit(OpCodes.Bne_Un, lblSizeNotEqual);
+
+					for (; memberLeft < memberEnd; ++memberLeft)
+					{
+						var member = members[memberLeft];
+
+						var lblNotThisMember = g.DefineLabel();
+
+						g.Emit(OpCodes.Dup); // duplicate CString
+						g.Emit(OpCodes.Ldstr, member.Name);
+						g.EmitCall(OpCodes.Call, ((Func<CString, string, bool>)CString.CompareASCII).Method, null);
+						g.Emit(OpCodes.Brfalse, lblNotThisMember);
+
+						if (member is FieldInfo field)
+						{
+							if (type.IsValueType)
+								g.Emit(OpCodes.Ldloca_S, (byte)2);
+							else
+								g.Emit(OpCodes.Ldloc_2);
+
+							g.Emit(OpCodes.Ldarg_0);
+							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateDeserializer(field.FieldType), null);
+							g.Emit(OpCodes.Stfld, field);
+						}
+						else
+						{
+							var property = member as PropertyInfo;
+							if (type.IsValueType)
+								g.Emit(OpCodes.Ldloca_S, (byte)2);
+							else
+								g.Emit(OpCodes.Ldloc_2);
+
+							g.Emit(OpCodes.Ldarg_0);
+							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateDeserializer(property.PropertyType), null);
+							g.EmitCall(OpCodes.Call, property.SetMethod, null);
+						}
+
+						g.MarkLabel(lblNotThisMember);
+					}
+
+					g.MarkLabel(lblSizeNotEqual);
+
+					g.Emit(OpCodes.Pop); // remove CString
+
+					memberCurSize = memberNextSize;
+				}
+
+				// ++i
+				g.Emit(OpCodes.Ldloc_1);
+				g.Emit(OpCodes.Ldc_I4_1);
+				g.Emit(OpCodes.Add);
+				g.Emit(OpCodes.Stloc_1);
+
+				// i < length
+				g.MarkLabel(whileCond);
+				g.Emit(OpCodes.Ldloc_1);
+				g.Emit(OpCodes.Ldloc_0);
+				g.Emit(OpCodes.Blt_Un, whileLoop);
+
+				// end
+				g.Emit(OpCodes.Ldloc_2);
+				g.Emit(OpCodes.Ret);
+			}
+			else
+			{
+				g.MarkLabel(labels[(uint)JumpLabels.Map16]);
+				g.MarkLabel(labels[(uint)JumpLabels.Map32]);
 				g.Emit(OpCodes.Br, defaultLabel);
 			}
 		}
