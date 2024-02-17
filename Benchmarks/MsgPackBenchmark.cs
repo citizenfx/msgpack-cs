@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace MsgPack
 {
-	public class VsMessagePackBenchmark
+	public class MsgPackBenchmark
 	{
 		public const int Iterations = 1_000_000;
 
@@ -143,19 +143,6 @@ namespace MsgPack
 					"hello5",
 				});
 			}
-		}
-
-		static void Main()
-		{
-			//var config = DefaultConfig.Instance.AddJob(Job.Default.WithRuntime(new MonoRuntime("Mono", "C:\\Program Files\\Mono\\bin\\mono.exe")).WithIterationCount(20));
-			var config = DefaultConfig.Instance.AddJob(Job.Default.WithIterationCount(20));
-
-			var summary = BenchmarkRunner.Run<VsMessagePackBenchmark>(config);
-			Console.WriteLine(summary);
-
-			//(new Benchmark()).SerializeDictionaryStringStringAsObject2();
-
-			Console.ReadLine();
 		}
 	}
 }

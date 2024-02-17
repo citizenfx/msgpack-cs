@@ -11,7 +11,7 @@ namespace MsgPack
 {
 
 	internal delegate void MsgPackObjectSerializer(MsgPackSerializer serializer, object value);
-	internal delegate object MsgPackObjectDeserializer(ref MsgPackDeserializer deserializer);
+	internal delegate object MsgPackObjectDeserializer(in MsgPackDeserializer deserializer);
 
 	internal readonly struct Serializer
 	{
@@ -47,37 +47,10 @@ namespace MsgPack
 		}
 	}
 
-	internal readonly struct Deserializer
-	{
-		public readonly MsgPackObjectDeserializer m_dynamic;
-		public readonly MethodInfo m_method;
-
-		public Deserializer(MethodInfo deserializer, MsgPackObjectDeserializer objectDeserializer)
-		{
-			m_method = deserializer;
-			m_dynamic = objectDeserializer;
-		}
-
-		public Deserializer(MethodInfo method)
-		{
-			m_method = method;
-
-			DynamicMethod dynamicMethod = new DynamicMethod(method.DeclaringType.Name,
-				typeof(object), new[] { typeof(MsgPackDeserializer).MakeByRefType() }, typeof(Deserializer).Module, true);
-			var g = dynamicMethod.GetILGenerator();
-
-			g.Emit(OpCodes.Ldarg_0);
-			g.EmitCall(OpCodes.Call, method, null);
-			g.Emit(OpCodes.Box, method.ReturnType);
-			g.Emit(OpCodes.Ret);
-			m_dynamic = (MsgPackObjectDeserializer)dynamicMethod.CreateDelegate(typeof(MsgPackObjectDeserializer));
-		}
-	}
-
 	internal static class MsgPackRegistry
 	{
 		static readonly Dictionary<Type, Serializer> m_serializers = new Dictionary<Type, Serializer>();
-		static readonly Dictionary<Type, Deserializer> m_deserializers = new Dictionary<Type, Deserializer>();
+		static readonly Dictionary<Type, MethodInfo> m_deserializers = new Dictionary<Type, MethodInfo>();
 
 		internal static readonly AssemblyBuilder m_assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("AwaitResearch"), AssemblyBuilderAccess.RunAndCollect);
 		internal static readonly ModuleBuilder m_moduleBuilder = m_assemblyBuilder.DefineDynamicModule("main");
@@ -92,6 +65,17 @@ namespace MsgPack
 				if (parameters.Length == 1 && method.Name == "Serialize")
 				{
 					m_serializers.Add(parameters[0].ParameterType, Serializer.CreateWithObjectWrapper(method));
+				}
+			}
+
+			methods = typeof(MsgPackDeserializer).GetMethods(BindingFlags.Instance | BindingFlags.Public);
+			for (uint i = 0; i < methods.Length; ++i)
+			{
+				var method = methods[i];
+				var parameters = method.GetParameters();
+				if (parameters.Length == 0 && method.Name.StartsWith("Deserialize"))
+				{
+					m_deserializers.Add(method.ReturnType, method);
 				}
 			}
 		}
@@ -120,30 +104,24 @@ namespace MsgPack
 				Type type = obj.GetType();
 				if (type.IsPrimitive)
 				{
-					if (type == typeof(bool))
-						serializer.Serialize((bool)obj);
-					else if (type == typeof(byte))
-						serializer.Serialize((byte)obj);
-					else if (type == typeof(sbyte))
-						serializer.Serialize((sbyte)obj);
-					else if (type == typeof(ushort))
-						serializer.Serialize((ushort)obj);
-					else if (type == typeof(short))
-						serializer.Serialize((short)obj);
-					else if (type == typeof(uint))
-						serializer.Serialize((uint)obj);
-					else if (type == typeof(int))
-						serializer.Serialize((int)obj);
-					else if (type == typeof(ulong))
-						serializer.Serialize((ulong)obj);
-					else if (type == typeof(long))
-						serializer.Serialize((long)obj);
-					else if (type == typeof(float))
-						serializer.Serialize((float)obj);
-					else if (type == typeof(double))
-						serializer.Serialize((double)obj);
-					else if (type == typeof(char))
-						serializer.Serialize((char)obj);
+					switch(obj)
+					{
+						case bool v: serializer.Serialize(v); break;
+						case char v: serializer.Serialize(v); break;
+
+						case byte v: serializer.Serialize(v); break;
+						case ushort v: serializer.Serialize(v); break;
+						case uint v: serializer.Serialize(v); break;
+						case ulong v: serializer.Serialize(v); break;
+
+						case sbyte v: serializer.Serialize(v); break;
+						case short v: serializer.Serialize(v); break;
+						case int v: serializer.Serialize(v); break;
+						case long v: serializer.Serialize(v); break;
+
+						case float v: serializer.Serialize(v); break;
+						case double v: serializer.Serialize(v); break;
+					}
 				}
 				else if (TryGetSerializer(type, out var methodInfo))
 				{
@@ -171,15 +149,6 @@ namespace MsgPack
 				: CreateSerializer(type)?.Item1.m_objectSerializer;
 		}
 
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		internal static MsgPackObjectDeserializer GetOrCreateObjectDeserializer<T>() => GetOrCreateObjectDeserializer(typeof(T));
-		internal static MsgPackObjectDeserializer GetOrCreateObjectDeserializer(Type type)
-		{
-			return TryGetDeserializer(type, out var methodInfo)
-				? methodInfo.m_dynamic
-				: CreateSerializer(type)?.Item2.m_dynamic;
-		}
-
 		internal static MethodInfo GetOrCreateSerializer(Type type)
 		{
 			return TryGetSerializer(type, out var methodInfo)
@@ -190,11 +159,11 @@ namespace MsgPack
 		internal static MethodInfo GetOrCreateDeserializer(Type type)
 		{
 			return TryGetDeserializer(type, out var methodInfo)
-				? methodInfo.m_method
-				: CreateSerializer(type)?.Item2.m_method;
+				? methodInfo
+				: CreateSerializer(type)?.Item2;
 		}
 
-		private static Tuple<Serializer, Deserializer> CreateSerializer(Type type)
+		private static Tuple<Serializer, MethodInfo> CreateSerializer(Type type)
 		{
 			if (type.IsPrimitive)
 			{
@@ -235,11 +204,10 @@ namespace MsgPack
 		}
 
 		internal static bool TryGetSerializer(Type type, out Serializer serializer) => m_serializers.TryGetValue(type, out serializer);
-		internal static bool TryGetDeserializer(Type type, out Deserializer deserializer) => m_deserializers.TryGetValue(type, out deserializer);
+		internal static bool TryGetDeserializer(Type type, out MethodInfo deserializer) => m_deserializers.TryGetValue(type, out deserializer);
 
 		internal static void RegisterSerializer(Type type, MethodInfo serializer) => m_serializers.Add(type, Serializer.CreateWithObjectWrapper(serializer));
 		internal static void RegisterSerializer(Type type, Serializer serializer) => m_serializers.Add(type, serializer);
-		internal static void RegisterDeserializer(Type type, MethodInfo deserializer) => m_deserializers.Add(type, new Deserializer(deserializer));
-		internal static void RegisterDeserializer(Type type, Deserializer deserializer) => m_deserializers.Add(type, deserializer);
+		internal static void RegisterDeserializer(Type type, MethodInfo deserializer) => m_deserializers.Add(type, deserializer);
 	}
 }

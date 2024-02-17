@@ -9,13 +9,6 @@ using System.Text;
 
 namespace MsgPack
 {
-	delegate object DeserializeFunc(ref MsgPackDeserializer deserializer);
-	delegate void GetMethodVoid(ref MsgPackDeserializer deserializer);
-	delegate void GetMethodVoid<A>(ref MsgPackDeserializer deserializer, A a);
-	delegate T GetMethod<out T>(ref MsgPackDeserializer deserializer);
-	delegate T GetMethod<out T, A>(ref MsgPackDeserializer deserializer, A a);
-	unsafe delegate byte* GetAdvancePointer(ref MsgPackDeserializer deserializer, uint amount);
-
 	public partial struct MsgPackDeserializer
 	{
 		static readonly Dictionary<Type, KeyValuePair<MethodInfo, MethodInfo>> s_typeConversions = new Dictionary<Type, KeyValuePair<MethodInfo, MethodInfo>>();

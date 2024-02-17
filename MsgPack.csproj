@@ -183,7 +183,11 @@
     <Compile Include="Attributes\KeyAttribute.cs" />
     <Compile Include="Attributes\MsgPackSerializableAttribute.cs" />
     <Compile Include="Attributes\IndexAttribute.cs" />
-    <Compile Include="Benchmarks\VsMessagePackBenchmark.cs" />
+    <Compile Include="Benchmarks\SortingBenchmark.cs" />
+    <Compile Include="Benchmarks\Program.cs" />
+    <Compile Include="Benchmarks\MsgPackBenchmark.cs" />
+    <Compile Include="Details\DynamicArray.cs" />
+    <Compile Include="Details\Helper.cs" />
     <Compile Include="PlatformTypes\Callback.cs" />
     <Compile Include="PlatformTypes\CString.cs" />
     <Compile Include="Formatters\ArrayFormatter.cs" />

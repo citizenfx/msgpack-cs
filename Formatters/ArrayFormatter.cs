@@ -6,7 +6,7 @@ namespace MsgPack.Formatters
 {
 	internal static class ArrayFormatter
 	{
-		public static Tuple<Serializer, Deserializer> Build(Type type)
+		public static Tuple<Serializer, MethodInfo> Build(Type type)
 		{
 			Type typeArray = type.MakeArrayType();
 
@@ -68,7 +68,7 @@ namespace MsgPack.Formatters
 							g.MarkLabel(whileCond);
 							g.Emit(OpCodes.Ldloc_1);
 							g.Emit(OpCodes.Ldloc_0);
-							g.Emit(OpCodes.Blt_Un_S, whileLoop);
+							g.Emit(OpCodes.Blt_Un, whileLoop);
 						}
 						g.Emit(OpCodes.Ret);
 
@@ -98,15 +98,6 @@ namespace MsgPack.Formatters
 						g.EmitCall(OpCodes.Call, methodSerialize, null);
 						g.Emit(OpCodes.Ret);
 					}
-
-					MethodBuilder methodDeserializeObject = typeBuilder.DefineMethod("DeserializeObject", MethodAttributes.Public | MethodAttributes.Static,
-						typeof(object), new[] { typeof(MsgPackDeserializer).MakeByRefType() });
-					{
-						var g = methodDeserializeObject.GetILGenerator();
-						g.Emit(OpCodes.Ldarg_0);
-						g.EmitCall(OpCodes.Call, methodDeserialize, null);
-						g.Emit(OpCodes.Ret);
-					}
 				}
 
 				buildType = typeBuilder.CreateType();
@@ -115,13 +106,12 @@ namespace MsgPack.Formatters
 			Serializer serializeMethod = new Serializer(buildType.GetMethod("Serialize"),
 				(MsgPackObjectSerializer)buildType.GetMethod("SerializeObject").CreateDelegate(typeof(MsgPackObjectSerializer)));
 
-			Deserializer deserializeMethod = new Deserializer(buildType.GetMethod("Deserialize"),
-				(MsgPackObjectDeserializer)buildType.GetMethod("DeserializeObject").CreateDelegate(typeof(MsgPackObjectDeserializer)));
+			MethodInfo deserializeMethod = buildType.GetMethod("Deserialize");
 
 			MsgPackRegistry.RegisterSerializer(typeArray, serializeMethod);
 			MsgPackRegistry.RegisterDeserializer(typeArray, deserializeMethod);
 
-			return new Tuple<Serializer, Deserializer>(serializeMethod, deserializeMethod);
+			return new Tuple<Serializer, MethodInfo>(serializeMethod, deserializeMethod);
 		}
 	}
 }

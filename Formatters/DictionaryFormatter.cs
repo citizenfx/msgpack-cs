@@ -8,7 +8,7 @@ namespace MsgPack.Formatters
 {
 	internal static class DictionaryFormatter
 	{
-		public static Tuple<Serializer, Deserializer> Build(Type typeKey, Type typeValue)
+		public static Tuple<Serializer, MethodInfo> Build(Type typeKey, Type typeValue)
 		{
 			Type typeKeyValuePair = typeof(KeyValuePair<,>).MakeGenericType(typeKey, typeValue);
 			Type typeIEnumerator = typeof(IEnumerator<>).MakeGenericType(typeKeyValuePair);
@@ -81,7 +81,7 @@ namespace MsgPack.Formatters
 							g.MarkLabel(whileCond);
 							g.Emit(OpCodes.Ldloc_0);
 							g.EmitCall(OpCodes.Callvirt, typeof(IEnumerator).GetMethod("MoveNext", Type.EmptyTypes), null);
-							g.Emit(OpCodes.Brtrue_S, whileLoop);
+							g.Emit(OpCodes.Brtrue, whileLoop);
 						}
 						g.Emit(OpCodes.Ret);
 
@@ -128,8 +128,7 @@ namespace MsgPack.Formatters
 			Serializer serializeMethod = new Serializer(buildType.GetMethod("Serialize"),
 				(MsgPackObjectSerializer)buildType.GetMethod("SerializeObject").CreateDelegate(typeof(MsgPackObjectSerializer)));
 
-			Deserializer deserializeMethod = new Deserializer(buildType.GetMethod("Deserialize"),
-				(MsgPackObjectDeserializer)buildType.GetMethod("DeserializeObject").CreateDelegate(typeof(MsgPackObjectDeserializer)));
+			MethodInfo deserializeMethod = buildType.GetMethod("Deserialize");
 
 			MsgPackRegistry.RegisterSerializer(typeDictionary, serializeMethod);
 			MsgPackRegistry.RegisterSerializer(typeIDictionary, serializeMethod);
@@ -139,7 +138,7 @@ namespace MsgPack.Formatters
 			MsgPackRegistry.RegisterDeserializer(typeIDictionary, deserializeMethod);
 			MsgPackRegistry.RegisterDeserializer(typeIReadOnlyDictionary, deserializeMethod);
 
-			return new Tuple<Serializer, Deserializer>(serializeMethod, deserializeMethod);
+			return new Tuple<Serializer, MethodInfo>(serializeMethod, deserializeMethod);
 		}
 	}
 }

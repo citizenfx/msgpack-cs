@@ -1,10 +1,14 @@
-﻿using System;
+﻿using BenchmarkDotNet.Disassemblers;
+using MessagePack;
+using Microsoft.Diagnostics.Runtime;
+using System;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security;
+using static MsgPack.MsgPackDeserializer;
 
 namespace MsgPack
 {
@@ -12,6 +16,12 @@ namespace MsgPack
 	[SecuritySafeCritical]
 	public partial struct MsgPackDeserializer
 	{
+		internal struct RestorePoint
+		{
+			public unsafe byte* Ptr { get; private set; }
+			internal unsafe RestorePoint(byte* ptr) => this.Ptr = ptr;
+		}
+
 		private unsafe byte* m_ptr;
 		private readonly unsafe byte* m_end;
 		private readonly string m_netSource;
@@ -461,6 +471,9 @@ namespace MsgPack
 		private Quaternion ReadQuaternion() => new Quaternion(ReadSingleLE(), ReadSingleLE(), ReadSingleLE(), ReadSingleLE());
 		private unsafe void SkipQuaternion() => AdvancePointer(4 * sizeof(float));
 
+		internal unsafe RestorePoint CreateRestorePoint() => new RestorePoint(m_ptr);
+		internal unsafe void Restore(RestorePoint restorePoint) => m_ptr = restorePoint.Ptr;
+
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private unsafe byte* AdvancePointer(uint amount)
 		{
@@ -474,6 +487,8 @@ namespace MsgPack
 
 			return curPtr;
 		}
+
+		#region statics (easier access)
 
 		public static byte ReadByte(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
 		public static float ReadSingle(ref MsgPackDeserializer deserializer) => deserializer.ReadSingle();
@@ -491,9 +506,16 @@ namespace MsgPack
 		public static void SkipString(ref MsgPackDeserializer deserializer, uint length) => deserializer.SkipString(length);
 		public static float ReadSingleLE(ref MsgPackDeserializer deserializer) => deserializer.ReadSingleLE();
 
+		public static object[] ReadObjectArray(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadObjectArray(length);
+
 		public static void SkipVector2(ref MsgPackDeserializer deserializer) => deserializer.SkipVector2();
 		public static void SkipVector3(ref MsgPackDeserializer deserializer) => deserializer.SkipVector3();
 		public static void SkipVector4(ref MsgPackDeserializer deserializer) => deserializer.SkipVector4();
 		public static void SkipQuaternion(ref MsgPackDeserializer deserializer) => deserializer.SkipQuaternion();
-    }
+
+		internal static unsafe RestorePoint CreateRestorePoint(ref MsgPackDeserializer deserializer) => deserializer.CreateRestorePoint();
+		internal static unsafe void Restore(ref MsgPackDeserializer deserializer, RestorePoint restorePoint) => deserializer.Restore(restorePoint);
+
+		#endregion
+	}
 }

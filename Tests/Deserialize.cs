@@ -1,6 +1,4 @@
-﻿using FastSerialization;
-using Microsoft.Diagnostics.Runtime;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 
 namespace MsgPack.Tests
@@ -8,12 +6,12 @@ namespace MsgPack.Tests
 	[TestClass]
 	public class Deserialize
 	{
-		private delegate TResult TypeDeserializer<out TResult>(ref MsgPackDeserializer arg);
+		private delegate TResult TypeDeserializer<out TResult>(in MsgPackDeserializer arg);
 
-		private T CallMethod<T>(ref MsgPackDeserializer deserializer)
+		private T CallMethod<T>(in MsgPackDeserializer deserializer)
 		{
 			if (MsgPackRegistry.TryGetDeserializer(typeof(T), out var deserializeMethod))
-				return ((TypeDeserializer<T>)deserializeMethod.m_method.CreateDelegate(typeof(TypeDeserializer<T>)))(ref deserializer);
+				return ((TypeDeserializer<T>)deserializeMethod.CreateDelegate(typeof(TypeDeserializer<T>)))(deserializer);
 			
 			Assert.Fail();
 			return default;
@@ -80,16 +78,16 @@ namespace MsgPack.Tests
 						deserializer.DeserializeToUInt64());
 
 					Assert.AreEqual(254u,
-						CallMethod<Player>(ref deserializer)?.m_id);
+						CallMethod<Player>(deserializer)?.m_id);
 
 					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f),
-						CallMethod<Vector3>(ref deserializer));
+						CallMethod<Vector3>(deserializer));
 
 					Assert.AreEqual(new Vector2(1.0f, 2.0f),
-						CallMethod<Vector2>(ref deserializer));
+						CallMethod<Vector2>(deserializer));
 
 					Assert.AreEqual(new Vector4(1.0f, 2.0f, 3.0f, 4.0f),
-						CallMethod<Vector4>(ref deserializer));
+						CallMethod<Vector4>(deserializer));
 				}
 			}
 		}
