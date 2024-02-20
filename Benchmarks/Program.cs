@@ -14,7 +14,10 @@ namespace MsgPack.Benchmarks
 
 			if (false)
 			{
-				new Deserialize().DeserializeTest();
+				var d = new Deserialize();
+				//d.DeserializeMultiple();
+				d.DeserializeVector3();
+				//d.DeserializePlayer();
 				//SortingBenchmark.TestSorting();
 			}
 
