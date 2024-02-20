@@ -515,6 +515,12 @@ namespace MsgPack
 		public static object[] ReadObjectArray(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadObjectArray(length);
 
 		public static void SkipObject(ref MsgPackDeserializer deserializer) => deserializer.SkipObject();
+		public static void SkipObjects(ref MsgPackDeserializer deserializer, uint size)
+		{
+			for (uint i = 0; i < size; ++i)
+				deserializer.SkipObject();
+		}
+
 		public static void SkipVector2(ref MsgPackDeserializer deserializer) => deserializer.SkipVector2();
 		public static void SkipVector3(ref MsgPackDeserializer deserializer) => deserializer.SkipVector3();
 		public static void SkipVector4(ref MsgPackDeserializer deserializer) => deserializer.SkipVector4();

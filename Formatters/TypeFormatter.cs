@@ -12,8 +12,6 @@ namespace MsgPack.Formatters
 {
 	internal static class TypeFormatter
 	{
-		//private static readonly MethodInfo s_methodReadByte = typeof(MsgPackDeserializer).GetMethod("ReadByte", BindingFlags.Static | BindingFlags.Public);
-
 		enum ConstructorOptions
 		{
 			Null = 0,
@@ -45,6 +43,7 @@ namespace MsgPack.Formatters
 			First = 0xC0,
 			Last = First + Count,
 		}
+
 		enum JumpLabelsExtra
 		{
 			// Jump table
@@ -68,7 +67,7 @@ namespace MsgPack.Formatters
 				TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
 				{
 					MethodInfo methodSerialize = BuildSerializer(type, typeBuilder);
-					MethodInfo methodDeserialize = BuildDeserializer(type, typeBuilder);
+					BuildDeserializer(type, typeBuilder);
 					
 					MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("SerializeObject", MethodAttributes.Public | MethodAttributes.Static,
 						typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
@@ -78,18 +77,6 @@ namespace MsgPack.Formatters
 						g.Emit(OpCodes.Ldarg_1);
 						g.Emit(OpCodes.Unbox_Any, type);
 						g.EmitCall(OpCodes.Call, methodSerialize, null);
-						g.Emit(OpCodes.Ret);
-					}
-
-					MethodBuilder methodDeserializeObject = typeBuilder.DefineMethod("DeserializeObject", MethodAttributes.Public | MethodAttributes.Static,
-						typeof(object), new[] { typeof(MsgPackDeserializer).MakeByRefType() });
-					{
-						var g = methodDeserializeObject.GetILGenerator();
-						g.Emit(OpCodes.Ldarg_0);
-						g.EmitCall(OpCodes.Call, methodDeserialize, null);
-						if (type.IsValueType)
-							g.Emit(OpCodes.Box, type);
-
 						g.Emit(OpCodes.Ret);
 					}
 				}
@@ -125,8 +112,8 @@ namespace MsgPack.Formatters
 					{
 						case Layout.Indexed:
 							{
-								uint maxIndex = allMembers.Max(m => m.GetCustomAttribute<IndexAttribute>() is IndexAttribute index ? index.Index : 0);
-								MemberInfo[] members = new MemberInfo[maxIndex];
+								uint indexSize = allMembers.Max(m => m.GetCustomAttribute<IndexAttribute>()?.Index + 1 ?? 0);
+								MemberInfo[] members = new MemberInfo[indexSize];
 
 								for (uint i = 0; i < allMembers.Length; ++i)
 								{
@@ -143,7 +130,7 @@ namespace MsgPack.Formatters
 									}
 								}
 
-								BuildArraySerializeBody(type, g, members, methodSerialize);
+								BuildSerializeArrayBody(type, g, members, methodSerialize);
 							}
 							break;
 
@@ -153,7 +140,7 @@ namespace MsgPack.Formatters
 									(m.MemberType & (MemberTypes.Field | MemberTypes.Property)) != 0
 									&& m.GetCustomAttribute<KeyAttribute>() is KeyAttribute);
 
-								BuildMapSerializeBody(type, g, members, methodSerialize);
+								BuildSerializeMapBody(type, g, members, methodSerialize);
 							}
 							break;
 					}
@@ -165,7 +152,7 @@ namespace MsgPack.Formatters
 						(m.MemberType & (MemberTypes.Field | MemberTypes.Property)) != 0
 						&& m.GetCustomAttribute<IgnoreAttribute>() == null);
 
-					BuildMapSerializeBody(type, g, members, methodSerialize);
+					BuildSerializeMapBody(type, g, members, methodSerialize);
 				}
 
 				g.Emit(OpCodes.Ret);
@@ -183,7 +170,7 @@ namespace MsgPack.Formatters
 		/// <param name="currentSerializer">Method for recursive calls, i.e.: the caller itself</param>
 		/// <exception cref="NotSupportedException"></exception>
 		/// <exception cref="ArgumentException"></exception>
-		private static void BuildArraySerializeBody(Type type, ILGenerator g, MemberInfo[] members, MethodInfo currentSerializer)
+		private static void BuildSerializeArrayBody(Type type, ILGenerator g, MemberInfo[] members, MethodInfo currentSerializer)
 		{
 			var methodWriteNil = typeof(MsgPackSerializer).GetMethod("WriteNil");
 
@@ -199,7 +186,7 @@ namespace MsgPack.Formatters
 						{
 							var methodFieldSerializer = type == field.FieldType
 								? currentSerializer
-								: MsgPackRegistry.GetOrCreateObjectSerializer(field.FieldType).Method;
+								: MsgPackRegistry.GetOrCreateSerializer(field.FieldType);
 
 							if (methodFieldSerializer == null)
 								throw new NotSupportedException($"Requested serializer for {type.Name}.{field.Name} of type {field.FieldType} could not be found.");
@@ -216,7 +203,7 @@ namespace MsgPack.Formatters
 						{
 							var methodFieldSerializer = type == property.PropertyType
 								? currentSerializer
-								: MsgPackRegistry.GetOrCreateObjectSerializer(property.PropertyType).Method;
+								: MsgPackRegistry.GetOrCreateSerializer(property.PropertyType);
 
 							if (methodFieldSerializer == null)
 								throw new NotSupportedException($"Requested serializer for {type.Name}.{property.Name} of type {property.PropertyType} could not be found.");
@@ -246,8 +233,8 @@ namespace MsgPack.Formatters
 		/// Builds the IL code needed for the map serializing
 		/// </summary>
 		/// <param name="members">Filtered by <see cref="KeyAttribute"/>, null values are ignored</param>
-		/// <inheritdoc cref="BuildArraySerializeBody"/>
-		private static void BuildMapSerializeBody(Type type, ILGenerator g, MemberInfo[] members, MethodInfo currentSerializer)
+		/// <inheritdoc cref="BuildSerializeArrayBody"/>
+		private static void BuildSerializeMapBody(Type type, ILGenerator g, MemberInfo[] members, MethodInfo currentSerializer)
 		{
 			var methodStringSerializer = typeof(MsgPackSerializer).GetMethod("Serialize", new Type[] { typeof(string) });
 
@@ -337,6 +324,9 @@ namespace MsgPack.Formatters
 
 			Label lblFixIntPositive = g.DefineLabel(),
 				lblFixIntNegative = g.DefineLabel(),
+				lblFixMap = g.DefineLabel(),
+				lblFixArray = g.DefineLabel(),
+				lblFixString = g.DefineLabel(),
 				lblDefault = g.DefineLabel();
 
 			Label[] labels = new Label[(uint)JumpLabels.Count];
@@ -349,6 +339,21 @@ namespace MsgPack.Formatters
 			g.Emit(OpCodes.Ldloc_0);
 			g.Emit(OpCodes.Ldc_I4, 0x80);
 			g.Emit(OpCodes.Blt, lblFixIntPositive);
+
+			// 0x80 - 0x8f fixmap
+			g.Emit(OpCodes.Ldloc_0);
+			g.Emit(OpCodes.Ldc_I4, 0x90);
+			g.Emit(OpCodes.Blt, lblFixMap);
+
+			// 0x90 - 0x9f fixarray
+			g.Emit(OpCodes.Ldloc_0);
+			g.Emit(OpCodes.Ldc_I4, 0xA0);
+			g.Emit(OpCodes.Blt, lblFixArray);
+
+			// 0xa0 - 0xbf fixstr
+			g.Emit(OpCodes.Ldloc_0);
+			g.Emit(OpCodes.Ldc_I4, 0xC0);
+			g.Emit(OpCodes.Blt, lblFixString);
 
 			// > 0xDF negative fixint
 			g.Emit(OpCodes.Ldloc_0);
@@ -426,9 +431,9 @@ namespace MsgPack.Formatters
 			SwitchCase(labels[(uint)JumpLabels.Int64], g, GetResultMethod(MsgPackDeserializer.ReadInt64), constructors[(uint)ConstructorOptions.Int], lblDefault);
 
 			BuildDeserializeExtraTypesBody(g, type, labels, lblDefault);
-			BuildDeserializeStringBody(g, type, labels, lblDefault);
-			BuildDeserializeArrayBody(g, type, layout, labels, lblDefault);
-			BuildDeserializeMapBody(g, type, layout, labels, lblDefault);
+			BuildDeserializeStringBody(g, type, labels, lblFixString, lblDefault);
+			BuildDeserializeArrayBody(g, type, layout, labels, lblFixArray, lblDefault);
+			BuildDeserializeMapBody(g, type, layout, labels, lblFixMap, lblDefault);
 			
 			return methodDeserialize;
 		}
@@ -480,12 +485,19 @@ namespace MsgPack.Formatters
 			SwitchCaseExtraType(g, type, defaultLabel);
 		}
 
-		private static void BuildDeserializeStringBody(ILGenerator g, Type type, Label[] labels, Label defaultLabel)
+		private static void BuildDeserializeStringBody(ILGenerator g, Type type, Label[] labels, Label fixStrLabel, Label defaultLabel)
 		{
 			ConstructorInfo constructorString = type.GetConstructor(new Type[] { typeof(string) });
 			if (constructorString != null)
 			{
 				Label stringType = g.DefineLabel();
+
+				// 0xa0 - 0xbf
+				g.MarkLabel(fixStrLabel);
+				g.Emit(OpCodes.Ldloc_0);
+				g.Emit(OpCodes.Ldc_I4, 0xa0);
+				g.Emit(OpCodes.Sub);
+				g.Emit(OpCodes.Br, stringType);
 
 				// case 0xd9: string with 8 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str8]);
@@ -512,6 +524,7 @@ namespace MsgPack.Formatters
 			}
 			else
 			{
+				g.MarkLabel(fixStrLabel);
 				g.MarkLabel(labels[(uint)JumpLabels.Str8]);
 				g.MarkLabel(labels[(uint)JumpLabels.Str16]);
 				g.MarkLabel(labels[(uint)JumpLabels.Str32]);
@@ -519,20 +532,27 @@ namespace MsgPack.Formatters
 			}
 		}
 
-		private static void BuildDeserializeArrayBody(ILGenerator g, Type type, Layout layout, Label[] labels, Label defaultLabel)
+		private static void BuildDeserializeArrayBody(ILGenerator g, Type type, Layout layout, Label[] labels, Label fixArrayLabel, Label defaultLabel)
 		{
-			Label objectArrayType = g.DefineLabel();
+			Label arrayLabel = g.DefineLabel();
+
+			// 0x90 - 0x9f
+			g.MarkLabel(fixArrayLabel);
+			g.Emit(OpCodes.Ldloc_0);
+			g.Emit(OpCodes.Ldc_I4, 0x90);
+			g.Emit(OpCodes.Sub);
+			g.Emit(OpCodes.Br, arrayLabel);
 
 			g.MarkLabel(labels[(uint)JumpLabels.Array16]);
 			g.Emit(OpCodes.Ldarg_0);
 			g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
-			g.Emit(OpCodes.Br, objectArrayType);
+			g.Emit(OpCodes.Br, arrayLabel);
 
 			g.MarkLabel(labels[(uint)JumpLabels.Array32]);
 			g.Emit(OpCodes.Ldarg_0);
 			g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
 
-			g.MarkLabel(objectArrayType);
+			g.MarkLabel(arrayLabel);
 			g.Emit(OpCodes.Stloc_1);
 
 			ConstructorInfo constructorArray = type.GetConstructor(new Type[] { typeof(object[]) });
@@ -552,11 +572,11 @@ namespace MsgPack.Formatters
 					constructionTypes[i] = (member as FieldInfo)?.FieldType ?? ((PropertyInfo)member).PropertyType;
 				}
 
-				Label lengthNotEquals = g.DefineLabel();
+				Label arrayNotBigEnough = g.DefineLabel();
 
-				g.Emit(OpCodes.Ldloc_S, (byte)1);
+				g.Emit(OpCodes.Ldloc_1);
 				g.Emit(OpCodes.Ldc_I4, members.Count);
-				g.Emit(OpCodes.Bge_Un, lengthNotEquals);
+				g.Emit(OpCodes.Blt_Un, arrayNotBigEnough);
 
 				if (constructorArray != null)
 				{
@@ -570,14 +590,22 @@ namespace MsgPack.Formatters
 					ConstructorInfo constructor = type.GetConstructor(constructionTypes);
 					if (constructor != null)
 					{
-						for (int i = 0; i < constructionTypes.Length; ++i)
+						int valueIndex = 0;
+						for (; valueIndex < constructionTypes.Length; ++valueIndex)
 						{
 							g.Emit(OpCodes.Ldarg_0);
-							var deserializer = MsgPackRegistry.GetOrCreateDeserializer(constructionTypes[i])
-								?? throw new NullReferenceException($"Couldn't find deserializer for {constructionTypes[i]}");
+							var deserializer = MsgPackRegistry.GetOrCreateDeserializer(constructionTypes[valueIndex])
+								?? throw new NullReferenceException($"Couldn't find deserializer for {constructionTypes[valueIndex]}");
 
 							g.EmitCall(OpCodes.Call, deserializer, null);
 						}
+
+						// skip remaining objects in this array
+						g.Emit(OpCodes.Ldarg_0);
+						g.Emit(OpCodes.Ldloc_1);
+						g.Emit(OpCodes.Ldc_I4, valueIndex);
+						g.Emit(OpCodes.Sub);
+						g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(MsgPackDeserializer.SkipObjects), null);
 
 						g.Emit(OpCodes.Newobj, constructor);
 						g.Emit(OpCodes.Stloc_2);
@@ -587,17 +615,25 @@ namespace MsgPack.Formatters
 					{
 						g.Emit(OpCodes.Newobj, constructor);
 
-						for (int i = 0; i < members.Count; ++i)
+						int valueIndex = 0;
+						for (; valueIndex < members.Count; ++valueIndex)
 						{
-							var member = members[i];
+							var member = members[valueIndex];
 
 							g.Emit(OpCodes.Ldarg_0);
-							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateDeserializer(constructionTypes[i]), null);
+							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateDeserializer(constructionTypes[valueIndex]), null);
 							if (member is FieldInfo field)
 								g.Emit(OpCodes.Stfld, field);
 							else
 								g.EmitCall(OpCodes.Call, (member as PropertyInfo).SetMethod, null);
 						}
+
+						// skip remaining objects in this array
+						g.Emit(OpCodes.Ldarg_0);
+						g.Emit(OpCodes.Ldloc_1);
+						g.Emit(OpCodes.Ldc_I4, valueIndex);
+						g.Emit(OpCodes.Sub);
+						g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(MsgPackDeserializer.SkipObjects), null);
 
 						g.Emit(OpCodes.Stloc_2);
 					}
@@ -609,25 +645,25 @@ namespace MsgPack.Formatters
 						g.Emit(OpCodes.Pop); // remove exception
 
 						g.Emit(OpCodes.Ldarg_0);
-						g.Emit(OpCodes.Ldloc_S, (byte)3);
+						g.Emit(OpCodes.Ldloc_3);
 						g.EmitCall(OpCodes.Call, GetVoidMethod<MsgPackDeserializer.RestorePoint>(MsgPackDeserializer.Restore), null);
 
-						g.Emit(OpCodes.Leave, lengthNotEquals);
+						g.Emit(OpCodes.Leave, arrayNotBigEnough);
 					}
 					else
 						g.Emit(OpCodes.Throw); // rethrow, we're not going to try another constructor
 				}
 				g.EndExceptionBlock();
-				g.Emit(OpCodes.Ldloc_S, (byte)2);
+				g.Emit(OpCodes.Ldloc_2);
 				g.Emit(OpCodes.Ret);
 
-				g.MarkLabel(lengthNotEquals);
+				g.MarkLabel(arrayNotBigEnough);
 			}
 						
 			if (constructorArray != null)
 			{
 				g.Emit(OpCodes.Ldarg_0);
-				g.Emit(OpCodes.Ldloc_S, (byte)1);
+				g.Emit(OpCodes.Ldloc_1);
 				g.EmitCall(OpCodes.Call, GetResultMethod<uint, object[]>(MsgPackDeserializer.ReadObjectArray), null);
 				g.Emit(OpCodes.Newobj, constructorArray);
 				g.Emit(OpCodes.Ret);
@@ -638,7 +674,7 @@ namespace MsgPack.Formatters
 			}
 		}
 
-		private static unsafe void BuildDeserializeMapBody(ILGenerator g, Type type, Layout layout, Label[] labels, Label defaultLabel)
+		private static unsafe void BuildDeserializeMapBody(ILGenerator g, Type type, Layout layout, Label[] labels, Label fixMapLabel, Label defaultLabel)
 		{
 			ConstructorInfo constructor = type.GetConstructor(Type.EmptyTypes);
 			if (constructor != null || type.IsValueType)
@@ -657,18 +693,25 @@ namespace MsgPack.Formatters
 
 				members.Sort((l, r) => (l.Name.Length - r.Name.Length) * 1024 + l.Name.CompareTo(r.Name));
 
-				Label objectMapType = g.DefineLabel();
+				Label mapType = g.DefineLabel();
+
+				// 0x80 - 0x8f
+				g.MarkLabel(fixMapLabel);
+				g.Emit(OpCodes.Ldloc_0);
+				g.Emit(OpCodes.Ldc_I4, 0x80);
+				g.Emit(OpCodes.Sub);
+				g.Emit(OpCodes.Br, mapType);
 
 				g.MarkLabel(labels[(uint)JumpLabels.Map16]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
-				g.Emit(OpCodes.Br, objectMapType);
+				g.Emit(OpCodes.Br, mapType);
 
 				g.MarkLabel(labels[(uint)JumpLabels.Map32]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
 
-				g.MarkLabel(objectMapType);
+				g.MarkLabel(mapType);
 				g.Emit(OpCodes.Stloc_0);
 
 				// reset i
@@ -807,6 +850,7 @@ namespace MsgPack.Formatters
 			}
 			else
 			{
+				g.MarkLabel(fixMapLabel);
 				g.MarkLabel(labels[(uint)JumpLabels.Map16]);
 				g.MarkLabel(labels[(uint)JumpLabels.Map32]);
 				g.Emit(OpCodes.Br, defaultLabel);
