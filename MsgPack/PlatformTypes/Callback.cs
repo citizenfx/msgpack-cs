@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MsgPack
+namespace CitizenFX.MsgPack
 {
 	public class Callback
 	{

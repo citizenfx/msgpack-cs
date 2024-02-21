@@ -1,6 +1,7 @@
-﻿using MessagePack;
+﻿using CitizenFX.MsgPack;
+using MessagePack;
 
-namespace MsgPack.CitizenFX
+namespace CitizenFX.Core
 {
 	[MessagePackObject]
 	[MsgPackSerializable(Layout.Indexed)]

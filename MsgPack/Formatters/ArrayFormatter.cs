@@ -2,7 +2,7 @@
 using System.Reflection.Emit;
 using System.Reflection;
 
-namespace MsgPack.Formatters
+namespace CitizenFX.MsgPack.Formatters
 {
 	internal static class ArrayFormatter
 	{

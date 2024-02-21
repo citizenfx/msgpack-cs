@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MsgPack
+namespace CitizenFX.MsgPack
 {
 	public enum Layout
 	{

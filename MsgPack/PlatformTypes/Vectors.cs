@@ -1,4 +1,6 @@
-﻿namespace MsgPack
+﻿using CitizenFX.MsgPack;
+
+namespace CitizenFX.Core
 {
     public struct Vector2
     {

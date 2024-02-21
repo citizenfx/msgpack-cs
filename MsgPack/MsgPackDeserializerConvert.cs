@@ -7,125 +7,10 @@ using System.Text;
 // Sadly generics are quite limiting or else we could've turn all these in 1 function.
 #pragma warning disable IDE0004 // Remove unnecessary cast
 
-namespace MsgPack
+namespace CitizenFX.MsgPack
 {
 	public partial struct MsgPackDeserializer
 	{
-		static readonly Dictionary<Type, KeyValuePair<MethodInfo, MethodInfo>> s_typeConversions = new Dictionary<Type, KeyValuePair<MethodInfo, MethodInfo>>();
-
-		#region Remove these
-
-		[Obsolete("32 or 64 bits are as fast or faster")]
-		public unsafe byte DeserializeToUInt8()
-		{
-			byte type = *AdvancePointer(1);
-			if (type < 0x80) // positive fixint
-				return type;
-			else if (type > 0xDF)
-				return (byte)(type - 256); // fix negative number
-
-			switch (type)
-			{
-				case 0xc0: // null
-				case 0xc2: return 0;
-				case 0xc3: return 1;
-				case 0xca: return (byte)ReadSingle();
-				case 0xcb: return (byte)ReadDouble();
-				case 0xcc: return (byte)ReadUInt8();
-				case 0xcd: return (byte)ReadUInt16();
-				case 0xce: return (byte)ReadUInt32();
-				case 0xcf: return (byte)ReadUInt64();
-				case 0xd0: return (byte)ReadInt8();
-				case 0xd1: return (byte)ReadInt16();
-				case 0xd2: return (byte)ReadInt32();
-				case 0xd3: return (byte)ReadInt64();
-				default: return 0;
-			}
-		}
-
-		[Obsolete("32 or 64 bits are as fast or faster")]
-		public unsafe ushort DeserializeToUInt16()
-		{
-			byte type = *AdvancePointer(1);
-			if (type < 0x80) return type;
-			else if (type > 0xDF) return (ushort)(type - 256);
-			else switch (type)
-				{
-					case 0xc0: // null
-					case 0xc2: return 0;
-					case 0xc3: return 1;
-					case 0xca: return (ushort)ReadSingle();
-					case 0xcb: return (ushort)ReadDouble();
-					case 0xcc: return (ushort)ReadUInt8();
-					case 0xcd: return (ushort)ReadUInt16();
-					case 0xce: return (ushort)ReadUInt32();
-					case 0xcf: return (ushort)ReadUInt64();
-					case 0xd0: return (ushort)ReadInt8();
-					case 0xd1: return (ushort)ReadInt16();
-					case 0xd2: return (ushort)ReadInt32();
-					case 0xd3: return (ushort)ReadInt64();
-					default: return 0;
-				}
-		}
-
-		[Obsolete("32 or 64 bits are as fast or faster")]
-		public unsafe sbyte DeserializeToInt8()
-		{
-			byte type = *AdvancePointer(1);
-			if (type < 0x80) // positive fixint
-				return (sbyte)type;
-			else if (type > 0xDF)
-				return (sbyte)(type - 256); // fix negative number
-
-			switch (type)
-			{
-				case 0xc0: // null
-				case 0xc2: return 0;
-				case 0xc3: return 1;
-				case 0xca: return (sbyte)ReadSingle();
-				case 0xcb: return (sbyte)ReadDouble();
-				case 0xcc: return (sbyte)ReadUInt8();
-				case 0xcd: return (sbyte)ReadUInt16();
-				case 0xce: return (sbyte)ReadUInt32();
-				case 0xcf: return (sbyte)ReadUInt64();
-				case 0xd0: return (sbyte)ReadInt8();
-				case 0xd1: return (sbyte)ReadInt16();
-				case 0xd2: return (sbyte)ReadInt32();
-				case 0xd3: return (sbyte)ReadInt64();
-				default: return 0;
-			}
-		}
-
-		[Obsolete("32 or 64 bits are as fast or faster")]
-		public unsafe short DeserializeToInt16()
-		{
-			byte type = *AdvancePointer(1);
-			if (type < 0x80) // positive fixint
-				return type;
-			else if (type > 0xDF)
-				return (short)(type - 256); // fix negative number
-
-			switch (type)
-			{
-				case 0xc0: // null
-				case 0xc2: return 0;
-				case 0xc3: return 1;
-				case 0xca: return (short)ReadSingle();
-				case 0xcb: return (short)ReadDouble();
-				case 0xcc: return (short)ReadUInt8();
-				case 0xcd: return (short)ReadUInt16();
-				case 0xce: return (short)ReadUInt32();
-				case 0xcf: return (short)ReadUInt64();
-				case 0xd0: return (short)ReadInt8();
-				case 0xd1: return (short)ReadInt16();
-				case 0xd2: return (short)ReadInt32();
-				case 0xd3: return (short)ReadInt64();
-				default: return 0;
-			}
-		}
-
-		#endregion
-
 		#region Integer based
 
 		public unsafe bool DeserializeToBool()
@@ -278,6 +163,7 @@ namespace MsgPack
 		}
 
 		#endregion
+
 		public unsafe string DeserializeToString()
 		{
 			MsgPackCode type = (MsgPackCode)ReadByte();

@@ -1,11 +1,12 @@
-﻿using System;
+﻿using CitizenFX.Core;
+using System;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security;
 
-namespace MsgPack
+namespace CitizenFX.MsgPack
 {
 	// Can be a struct as it's merely used for for temporary storage
 	[SecuritySafeCritical]
@@ -285,6 +286,21 @@ namespace MsgPack
 			}
 		}
 
+		internal uint ReadArraySize()
+		{
+			var type = ReadByte();
+
+			// should start with an array
+			if (type >= 0x90 && type < 0xA0)
+				return type % 16u;
+			else if (type == 0xDC)
+				return ReadUInt16();
+			else if (type == 0xDD)
+				return ReadUInt32();
+
+			throw new InvalidOperationException("Unable to acquire the size of a non-array type");
+		}
+
 		internal unsafe float ReadSingle()
 		{
 			var v = ReadUInt32();
@@ -489,6 +505,8 @@ namespace MsgPack
 		}
 
 		#region statics (easier access)
+
+		public static uint ReadArraySize(ref MsgPackDeserializer deserializer) => deserializer.ReadArraySize();
 
 		public static byte ReadByte(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
 		public static float ReadSingle(ref MsgPackDeserializer deserializer) => deserializer.ReadSingle();

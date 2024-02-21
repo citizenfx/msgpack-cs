@@ -1,13 +1,9 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using static MsgPack.Benchmarks.SortingBenchmark;
 
-namespace MsgPack.Benchmarks
+namespace CitizenFX.MsgPack.Benchmarks
 {
 	public class SortingBenchmark
 	{

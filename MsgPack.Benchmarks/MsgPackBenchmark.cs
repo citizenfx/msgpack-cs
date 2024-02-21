@@ -1,9 +1,9 @@
 ﻿using BenchmarkDotNet.Attributes;
-using MsgPack.CitizenFX;
+using CitizenFX.Core;
 using System;
 using System.Collections.Generic;
 
-namespace MsgPack
+namespace CitizenFX.MsgPack.Benchmarks
 {
 	public class MsgPackBenchmark
 	{

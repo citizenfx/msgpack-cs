@@ -1,8 +1,8 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using MsgPack.CitizenFX;
+using CitizenFX.Core;
 using System;
 
-namespace MsgPack.Tests
+namespace CitizenFX.MsgPack.Tests
 {
 	[TestClass]
 	public class Deserialize

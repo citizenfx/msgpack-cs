@@ -3,7 +3,7 @@ using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
 using System;
 
-namespace MsgPack.Benchmarks
+namespace CitizenFX.MsgPack.Benchmarks
 {
 	internal class Program
 	{

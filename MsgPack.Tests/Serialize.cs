@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace MsgPack.Tests
+namespace CitizenFX.MsgPack.Tests
 {
 	[TestClass]
 	public class Serialize

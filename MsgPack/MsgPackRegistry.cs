@@ -1,13 +1,12 @@
-﻿using System;
-using System.Collections;
+﻿using CitizenFX.MsgPack.Formatters;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
-using MsgPack.Formatters;
 
-namespace MsgPack
+namespace CitizenFX.MsgPack
 {
 
 	internal delegate void MsgPackObjectSerializer(MsgPackSerializer serializer, object value);

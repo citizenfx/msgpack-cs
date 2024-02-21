@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace MsgPack
+namespace CitizenFX.MsgPack
 {
 	public class MsgPackSerializer
 	{

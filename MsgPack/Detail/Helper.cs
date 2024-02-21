@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Reflection;
 
-namespace MsgPack.Detail
+namespace CitizenFX.MsgPack.Detail
 {
 	internal class Helper
 	{

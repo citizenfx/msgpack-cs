@@ -1,14 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using CitizenFX.Core;
+using System;
 using System.Reflection.Emit;
 using System.Reflection;
 using ConstructorChoice = System.Collections.Generic.KeyValuePair<System.Reflection.ConstructorInfo, System.Reflection.Emit.OpCode>;
 using System.Linq;
 
-using static MsgPack.Detail.Helper;
-using MsgPack.Detail;
+using static CitizenFX.MsgPack.Detail.Helper;
+using CitizenFX.MsgPack.Detail;
 
-namespace MsgPack.Formatters
+namespace CitizenFX.MsgPack.Formatters
 {
 	internal static class TypeFormatter
 	{

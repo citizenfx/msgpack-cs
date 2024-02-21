@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace MsgPack.Detail
+namespace CitizenFX.MsgPack.Detail
 {
 	[StructLayout(LayoutKind.Explicit)]
 	internal unsafe struct StringComparisonHelper

@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace MsgPack
+namespace CitizenFX.MsgPack
 {
 	[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
 	public class IgnoreAttribute : Attribute

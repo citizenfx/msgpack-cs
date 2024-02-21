@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace MsgPack.Detail
+namespace CitizenFX.MsgPack.Detail
 {
 	/// <summary>
 	/// It's like a <see cref="List{T}" /> but allows for moving in an array (i.e.: no copy) and faster deletion by sacrificing ordered-ness

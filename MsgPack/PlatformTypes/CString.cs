@@ -7,7 +7,7 @@ using System.Security;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MsgPack
+namespace CitizenFX.MsgPack
 {
 	/// <summary>
 	/// A byte string that can be used to interop with native code.
