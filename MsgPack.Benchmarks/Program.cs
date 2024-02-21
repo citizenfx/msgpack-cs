@@ -1,7 +1,6 @@
 ﻿using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
-using MsgPack.Tests;
 using System;
 
 namespace MsgPack.Benchmarks
@@ -11,15 +10,6 @@ namespace MsgPack.Benchmarks
 		static void Main()
 		{
 #pragma warning disable CS0162
-
-			if (false)
-			{
-				var d = new Deserialize();
-				//d.DeserializeMultiple();
-				d.DeserializeVector3();
-				//d.DeserializePlayer();
-				//SortingBenchmark.TestSorting();
-			}
 
 			//if (false)
 			{
@@ -33,8 +23,6 @@ namespace MsgPack.Benchmarks
 				var config = DefaultConfig.Instance.AddJob(Job.Default.WithIterationCount(20));
 				Console.WriteLine(BenchmarkRunner.Run<SortingBenchmark>(config));
 			}
-
-			//(new Benchmark()).SerializeDictionaryStringStringAsObject2();
 
 			Console.ReadLine();
 

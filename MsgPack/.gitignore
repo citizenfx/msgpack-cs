@@ -6,7 +6,7 @@
 *.user
 *.sln.docstates
 
-# Solution settings
+# Project specific
 .vs/
 
 # Build results

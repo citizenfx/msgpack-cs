@@ -1,10 +1,7 @@
-﻿using System;
-using MsgPack;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.Diagnostics.Runtime.Utilities;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace MsgPack.Tests
 {
@@ -29,15 +26,12 @@ namespace MsgPack.Tests
 			}
         }
 
-		static Serialize()
+		[TestInitialize]
+		public void _Dummy()
 		{
 			MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>));
 			MsgPackRegistry.GetOrCreateSerializer(typeof(string[]));
-		}
 
-		[TestMethod]
-		public void _Dummy()
-		{
 			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>)) != null);
 			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializer(typeof(string[])) != null);
 		}

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MessagePack" Version="2.5.140" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MsgPack\MsgPack.csproj" />
+  </ItemGroup>
+
+</Project>

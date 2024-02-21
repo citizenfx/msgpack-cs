@@ -47,10 +47,10 @@ namespace MsgPack
 		}
 	}
 
-	internal static class MsgPackRegistry
+	public static class MsgPackRegistry
 	{
-		static readonly Dictionary<Type, Serializer> m_serializers = new Dictionary<Type, Serializer>();
-		static readonly Dictionary<Type, MethodInfo> m_deserializers = new Dictionary<Type, MethodInfo>();
+		private static readonly Dictionary<Type, Serializer> m_serializers = new Dictionary<Type, Serializer>();
+		private static readonly Dictionary<Type, MethodInfo> m_deserializers = new Dictionary<Type, MethodInfo>();
 
 		internal static readonly AssemblyBuilder m_assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("AwaitResearch"), AssemblyBuilderAccess.RunAndCollect);
 		internal static readonly ModuleBuilder m_moduleBuilder = m_assemblyBuilder.DefineDynamicModule("main");
@@ -80,7 +80,7 @@ namespace MsgPack
 			}
 		}
 
-		public static bool ImplementsGenericTypeDefinition(Type type, Type genericTypeDefinition)
+		private static bool ImplementsGenericTypeDefinition(Type type, Type genericTypeDefinition)
 		{
 			if (type.IsGenericType && type.GetGenericTypeDefinition() == genericTypeDefinition)
 				return true;
@@ -95,7 +95,6 @@ namespace MsgPack
 
 			return type.BaseType != null && ImplementsGenericTypeDefinition(type.BaseType, genericTypeDefinition);
 		}
-
 
 		internal static void Serialize(MsgPackSerializer serializer, object obj)
 		{
@@ -148,6 +147,8 @@ namespace MsgPack
 				? methodInfo.m_objectSerializer
 				: CreateSerializer(type)?.Item1.m_objectSerializer;
 		}
+
+		public static bool EnsureSerializer(Type type) => TryGetSerializer(type, out var _) || CreateSerializer(type)?.Item1.m_method != null;
 
 		internal static MethodInfo GetOrCreateSerializer(Type type)
 		{

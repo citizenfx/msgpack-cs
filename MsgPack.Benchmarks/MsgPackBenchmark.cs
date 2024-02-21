@@ -1,10 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Configs;
-using BenchmarkDotNet.Jobs;
-using BenchmarkDotNet.Running;
-using FastSerialization;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using MsgPack.Tests;
+using MsgPack.CitizenFX;
 using System;
 using System.Collections.Generic;
 
@@ -12,30 +7,40 @@ namespace MsgPack
 {
 	public class MsgPackBenchmark
 	{
+		public delegate TResult TypeDeserializer<out TResult>(in MsgPackDeserializer arg);
+
 		public const int Iterations = 1_000_000;
 
-		static Deserialize.TypeDeserializer<Player> deserializePlayer;
-		static Deserialize.TypeDeserializer<Vector2> deserializeVector2;
-		static Deserialize.TypeDeserializer<Vector3> deserializeVector3;
-		static Deserialize.TypeDeserializer<Vector4> deserializeVector4;
-		static Deserialize.TypeDeserializer<Quaternion> deserializeQuaternion;
+		static TypeDeserializer<Player> deserializePlayer;
+		static TypeDeserializer<Vector2> deserializeVector2;
+		static TypeDeserializer<Vector3> deserializeVector3;
+		static TypeDeserializer<Vector4> deserializeVector4;
+		//static Deserialize.TypeDeserializer<Quaternion> deserializeQuaternion;
+
+		public static TypeDeserializer<T> GetDelegate<T>()
+		{
+			if (MsgPackRegistry.TryGetDeserializer(typeof(T), out var deserializeMethod))
+				return (TypeDeserializer<T>)deserializeMethod.CreateDelegate(typeof(TypeDeserializer<T>));
+
+			throw new KeyNotFoundException();
+		}
 
 		[GlobalSetup]
 		public void Setup()
 		{
-			MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>));
-			MsgPackRegistry.GetOrCreateSerializer(typeof(string[]));
+			MsgPackRegistry.EnsureSerializer(typeof(Dictionary<string, string>));
+			MsgPackRegistry.EnsureSerializer(typeof(string[]));
 
-			MsgPackRegistry.GetOrCreateDeserializer(typeof(Player));
-			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector2));
-			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector3));
-			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector4));
+			MsgPackRegistry.EnsureSerializer(typeof(Player));
+			MsgPackRegistry.EnsureSerializer(typeof(Vector2));
+			MsgPackRegistry.EnsureSerializer(typeof(Vector3));
+			MsgPackRegistry.EnsureSerializer(typeof(Vector4));
 
-			deserializePlayer = Deserialize.GetDelegate<Player>();
-			deserializeVector2 = Deserialize.GetDelegate<Vector2>();
-			deserializeVector3 = Deserialize.GetDelegate<Vector3>();
-			deserializeVector4 = Deserialize.GetDelegate<Vector4>();
-			//deserializeQuaternion = Deserialize.GetDelegate<Quaternion>();
+			deserializePlayer = GetDelegate<Player>();
+			deserializeVector2 = GetDelegate<Vector2>();
+			deserializeVector3 = GetDelegate<Vector3>();
+			deserializeVector4 = GetDelegate<Vector4>();
+			//deserializeQuaternion = GetDelegate<Quaternion>();
 		}
 
 		[Benchmark(Description = "thorium Serialize(int)", OperationsPerInvoke = 5 * Iterations)]
@@ -164,7 +169,7 @@ namespace MsgPack
 			}
 		}
 
-		static byte[] input = new byte[] {
+		static readonly byte[] input = new byte[] {
 			0x97, // fixarray
 			0x7,
 			0xcc, 0xFE,
@@ -199,7 +204,7 @@ namespace MsgPack
 					else if (type == 0xDD)
 						length = deserializer.ReadUInt32();
 					else
-						Assert.Fail();
+						throw new FormatException();
 
 					// Deserialize
 					{

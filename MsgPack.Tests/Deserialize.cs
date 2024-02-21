@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using MsgPack.CitizenFX;
 using System;
 
 namespace MsgPack.Tests
@@ -7,15 +8,6 @@ namespace MsgPack.Tests
 	public class Deserialize
 	{
 		public delegate TResult TypeDeserializer<out TResult>(in MsgPackDeserializer arg);
-
-		public static TypeDeserializer<T> GetDelegate<T>()
-		{
-			if (MsgPackRegistry.TryGetDeserializer(typeof(T), out var deserializeMethod))
-				return (TypeDeserializer<T>)deserializeMethod.CreateDelegate(typeof(TypeDeserializer<T>));
-
-			Assert.Fail();
-			return default;
-		}
 
 		public static T CallMethod<T>(in MsgPackDeserializer deserializer)
 		{
@@ -85,41 +77,18 @@ namespace MsgPack.Tests
 
 				// Deserialize
 				{
-					Assert.AreEqual((short)7,
-						(short)deserializer.DeserializeToInt32());
-
-					Assert.AreEqual(254L,
-						((IConvertible)deserializer.Deserialize()).ToInt64(null));
-
-					Assert.AreEqual(16_909_060,
-						deserializer.DeserializeToInt32());
-
-					Assert.AreEqual((byte)0,
-						(byte)deserializer.DeserializeToUInt32());
-
-					Assert.AreEqual(0u,
-						deserializer.DeserializeToUInt32());
-
-					Assert.AreEqual(1uL,
-						deserializer.DeserializeToUInt64());
-
-					Assert.AreEqual(254u,
-						CallMethod<Player>(deserializer)?.m_id);
-
-					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f),
-						CallMethod<Vector3>(deserializer));
-
-					Assert.AreEqual(new Vector2(1.0f, 2.0f),
-						CallMethod<Vector2>(deserializer));
-
-					Assert.AreEqual(new Vector4(1.0f, 2.0f, 3.0f, 4.0f),
-						CallMethod<Vector4>(deserializer));
-
-					Assert.AreEqual(56u,
-						CallMethod<Player>(deserializer)?.m_id);
-
-					Assert.AreEqual(new Vector3(1.0f, 0.0f, 0.0f),
-						CallMethod<Vector3>(deserializer));
+					Assert.AreEqual(7, deserializer.DeserializeToInt32());
+					Assert.AreEqual(254L, ((IConvertible)deserializer.Deserialize()).ToInt64(null));
+					Assert.AreEqual(16_909_060, deserializer.DeserializeToInt32());
+					Assert.AreEqual(0u, deserializer.DeserializeToUInt32());
+					Assert.AreEqual(0u, deserializer.DeserializeToUInt32());
+					Assert.AreEqual(1uL, deserializer.DeserializeToUInt64());
+					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
+					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f), CallMethod<Vector3>(deserializer));
+					Assert.AreEqual(new Vector2(1.0f, 2.0f), CallMethod<Vector2>(deserializer));
+					Assert.AreEqual(new Vector4(1.0f, 2.0f, 3.0f, 4.0f), CallMethod<Vector4>(deserializer));
+					Assert.AreEqual(56u, CallMethod<Player>(deserializer)?.m_id);
+					Assert.AreEqual(new Vector3(1.0f, 0.0f, 0.0f), CallMethod<Vector3>(deserializer));
 				}
 			}
 		}

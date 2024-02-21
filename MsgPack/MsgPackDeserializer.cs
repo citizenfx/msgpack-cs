@@ -1,14 +1,9 @@
-﻿using BenchmarkDotNet.Disassemblers;
-using MessagePack;
-using Microsoft.Diagnostics.Runtime;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Dynamic;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security;
-using static MsgPack.MsgPackDeserializer;
 
 namespace MsgPack
 {
@@ -331,7 +326,7 @@ namespace MsgPack
 			uint v = *(ushort*)AdvancePointer(2);
 
 			if (BitConverter.IsLittleEndian)
-				v = (ushort)((v >> 8) | (v << 8)); // swap adjacent 8-bit blocks
+				v = unchecked((ushort)((v >> 8) | (v << 8))); // swap adjacent 8-bit blocks
 
 			return (ushort)v;
 		}
@@ -342,8 +337,8 @@ namespace MsgPack
 
 			if (BitConverter.IsLittleEndian)
 			{
-				v = (v >> 16) | (v << 16); // swap adjacent 16-bit blocks
-				v = ((v & 0xFF00FF00u) >> 8) | ((v & 0x00FF00FFu) << 8); // swap adjacent 8-bit blocks
+				v = unchecked((v >> 16) | (v << 16)); // swap adjacent 16-bit blocks
+				v = unchecked(((v & 0xFF00FF00u) >> 8) | ((v & 0x00FF00FFu) << 8)); // swap adjacent 8-bit blocks
 			}
 
 			return v;
@@ -355,9 +350,9 @@ namespace MsgPack
 
 			if (BitConverter.IsLittleEndian)
 			{
-				v = (v >> 32) | (v << 32); // swap adjacent 32-bit blocks
-				v = ((v & 0xFFFF0000FFFF0000u) >> 16) | ((v & 0x0000FFFF0000FFFFu) << 16); // swap adjacent 16-bit blocks
-				v = ((v & 0xFF00FF00FF00FF00u) >> 8) | ((v & 0x00FF00FF00FF00FFu) << 8); // swap adjacent 8-bit blocks
+				v = unchecked((v >> 32) | (v << 32)); // swap adjacent 32-bit blocks
+				v = unchecked(((v & 0xFFFF0000FFFF0000u) >> 16) | ((v & 0x0000FFFF0000FFFFu) << 16)); // swap adjacent 16-bit blocks
+				v = unchecked(((v & 0xFF00FF00FF00FF00u) >> 8) | ((v & 0x00FF00FF00FF00FFu) << 8)); // swap adjacent 8-bit blocks
 			}
 
 			return v;
