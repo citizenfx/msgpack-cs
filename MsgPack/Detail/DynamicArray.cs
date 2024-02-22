@@ -28,18 +28,11 @@ namespace CitizenFX.MsgPack.Detail
 			moveArray = null;
 		}
 
-		public ref T this[uint index]
+		public T this[int index]
 		{
-			get
-			{
-				if (index >= Count)
-					throw new IndexOutOfRangeException();
-
-				return ref array[index];
-			}
+			get => index < Count ? array[index] : throw new IndexOutOfRangeException();
+			set => array[index] = index < Count ? value : throw new IndexOutOfRangeException();
 		}
-
-		public ref T this[int index] => ref this[(uint)index];
 
 		public T[] AcquireArray()
 		{
