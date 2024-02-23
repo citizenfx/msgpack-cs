@@ -18,6 +18,8 @@ namespace CitizenFX.MsgPack
 			byte type = ReadByte();
 			if (type < 0x80) // positive fixint
 				return type != 0;
+			else if (type < 0xC0) // fixstr
+				return ReadStringAsTrueish(type % 32u);
 			else if (type > 0xDF) // negative fixint
 				return true; // is always != 0
 
@@ -40,10 +42,13 @@ namespace CitizenFX.MsgPack
 				case 0xcf: // uint64
 				case 0xcb: // double
 					return *(ulong*)AdvancePointer(8) != 0;
-				default:
-					return false;
+
+				case 0xd9: return ReadStringAsTrueish(ReadUInt8());
+				case 0xda: return ReadStringAsTrueish(ReadUInt16());
+				case 0xdb: return ReadStringAsTrueish(ReadUInt32());
 			}
 
+			SkipObject(type);
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(bool)}");
 		}
 
@@ -52,8 +57,13 @@ namespace CitizenFX.MsgPack
 			byte type = *AdvancePointer(1);
 			if (type < 0x80) // positive fixint
 				return (uint)type;
-			else if (type > 0xDF)
-				return (uint)(type - 256); // fix negative number
+			else if (type > 0xA0) // fixstr
+			{
+				if (type < 0xC0)
+					return uint.Parse(ReadString((uint)type - 0xA0));
+				else if (type > 0xDF)
+					return (uint)(sbyte)type; // fix negative number
+			}
 
 			switch (type)
 			{
@@ -70,9 +80,19 @@ namespace CitizenFX.MsgPack
 				case 0xd1: return (uint)ReadInt16();
 				case 0xd2: return (uint)ReadInt32();
 				case 0xd3: return (uint)ReadInt64();
-				default: return 0;
+
+				case 0xd4: return (uint)ReadExtraTypeAsInt64(1);
+				case 0xd5: return (uint)ReadExtraTypeAsInt64(2);
+				case 0xd6: return (uint)ReadExtraTypeAsInt64(4);
+				case 0xd7: return (uint)ReadExtraTypeAsInt64(8);
+				case 0xd8: return (uint)ReadExtraTypeAsInt64(16);
+
+				case 0xd9: return uint.Parse(ReadString(ReadUInt8()));
+				case 0xda: return uint.Parse(ReadString(ReadUInt16()));
+				case 0xdb: return uint.Parse(ReadString(ReadUInt32()));
 			}
 
+			SkipObject(type);
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(uint)}");
 		}
 
@@ -81,8 +101,13 @@ namespace CitizenFX.MsgPack
 			byte type = *AdvancePointer(1);
 			if (type < 0x80) // positive fixint
 				return (ulong)type;
-			else if (type > 0xDF)
-				return (ulong)(type - 256); // fix negative number
+			else if (type > 0xA0) // fixstr
+			{
+				if (type < 0xC0)
+					return ulong.Parse(ReadString((uint)type - 0xA0));
+				else if (type > 0xDF)
+					return (ulong)(type - 256); // fix negative number
+			}
 
 			switch (type)
 			{
@@ -99,8 +124,19 @@ namespace CitizenFX.MsgPack
 				case 0xd1: return (ulong)ReadInt16();
 				case 0xd2: return (ulong)ReadInt32();
 				case 0xd3: return (ulong)ReadInt64();
-				default: return 0;
+
+				case 0xd4: return (ulong)ReadExtraTypeAsInt64(1);
+				case 0xd5: return (ulong)ReadExtraTypeAsInt64(2);
+				case 0xd6: return (ulong)ReadExtraTypeAsInt64(4);
+				case 0xd7: return (ulong)ReadExtraTypeAsInt64(8);
+				case 0xd8: return (ulong)ReadExtraTypeAsInt64(16);
+
+				case 0xd9: return ulong.Parse(ReadString(ReadUInt8()));
+				case 0xda: return ulong.Parse(ReadString(ReadUInt16()));
+				case 0xdb: return ulong.Parse(ReadString(ReadUInt32()));
 			}
+
+			SkipObject(type);
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(ulong)}");
 		}
 
@@ -109,8 +145,13 @@ namespace CitizenFX.MsgPack
 			byte type = *AdvancePointer(1);
 			if (type < 0x80) // positive fixint
 				return (int)type;
-			else if (type > 0xDF)
-				return (int)(type - 256); // fix negative number
+			else if (type > 0xA0) // fixstr
+			{
+				if (type < 0xC0)
+					return int.Parse(ReadString((uint)type - 0xA0));
+				else if (type > 0xDF)
+					return (int)(sbyte)type; // fix negative number
+			}
 
 			switch (type)
 			{
@@ -127,9 +168,19 @@ namespace CitizenFX.MsgPack
 				case 0xd1: return (int)ReadInt16();
 				case 0xd2: return (int)ReadInt32();
 				case 0xd3: return (int)ReadInt64();
-				default: return 0;
+
+				case 0xd4: return (int)ReadExtraTypeAsInt64(1);
+				case 0xd5: return (int)ReadExtraTypeAsInt64(2);
+				case 0xd6: return (int)ReadExtraTypeAsInt64(4);
+				case 0xd7: return (int)ReadExtraTypeAsInt64(8);
+				case 0xd8: return (int)ReadExtraTypeAsInt64(16);
+
+				case 0xd9: return int.Parse(ReadString(ReadUInt8()));
+				case 0xda: return int.Parse(ReadString(ReadUInt16()));
+				case 0xdb: return int.Parse(ReadString(ReadUInt32()));
 			}
 
+			SkipObject(type);
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(int)}");
 		}
 
@@ -138,8 +189,13 @@ namespace CitizenFX.MsgPack
 			byte type = *AdvancePointer(1);
 			if (type < 0x80) // positive fixint
 				return (long)type;
-			else if (type > 0xDF)
-				return (long)(type - 256); // fix negative number
+			else if (type > 0xA0) // fixstr
+			{
+				if (type < 0xC0)
+					return long.Parse(ReadString((uint)type - 0xA0));
+				else if (type > 0xDF)
+					return (long)(sbyte)type; // fix negative number
+			}
 
 			switch (type)
 			{
@@ -156,9 +212,19 @@ namespace CitizenFX.MsgPack
 				case 0xd1: return (long)ReadInt16();
 				case 0xd2: return (long)ReadInt32();
 				case 0xd3: return (long)ReadInt64();
-				default: return 0;
+
+				case 0xd4: return (long)ReadExtraTypeAsInt64(1);
+				case 0xd5: return (long)ReadExtraTypeAsInt64(2);
+				case 0xd6: return (long)ReadExtraTypeAsInt64(4);
+				case 0xd7: return (long)ReadExtraTypeAsInt64(8);
+				case 0xd8: return (long)ReadExtraTypeAsInt64(16);
+
+				case 0xd9: return long.Parse(ReadString(ReadUInt8()));
+				case 0xda: return long.Parse(ReadString(ReadUInt16()));
+				case 0xdb: return long.Parse(ReadString(ReadUInt32()));
 			}
 
+			SkipObject(type);
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(long)}");
 		}
 
@@ -173,7 +239,7 @@ namespace CitizenFX.MsgPack
 					return ((byte)type).ToString();
 				else if (type <= MsgPackCode.FixMapMax)
 				{
-					SkipArray((byte)type % 16u);
+					SkipMap((byte)type % 16u);
 					return "Dictionary<object, object>";
 				}
 				else if (type <= MsgPackCode.FixArrayMax)
@@ -222,34 +288,10 @@ namespace CitizenFX.MsgPack
 				case MsgPackCode.Map32: SkipMap(ReadUInt32()); return nameof(Dictionary<object, object>);
 			}
 
+			SkipObject((byte)type);
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(string)}");
 		}
 
-		#region Container
-
-		public unsafe static Dictionary<string, string> DeserializeToDictionaryStringString()
-		{
-			Dictionary<string, string> result = new Dictionary<string, string>();
-
-
-
-			return result;
-		}
-
-		public unsafe static void DeserializeDictionary(out Dictionary<string, string> result)
-		{
-			result = new Dictionary<string, string>();
-
-			result.Add("key1", "key2");
-			result.Add("key2", "key2");
-			result.Add("key3", "key2");
-			result.Add("key4", "key2");
-			result.Add("key5", "key2");
-			result.Add("key6", "key2");
-			result.Add("key7", "key2");
-		}
-
-		#endregion
 
 		#region Floating point number based
 
@@ -258,8 +300,13 @@ namespace CitizenFX.MsgPack
 			byte type = *AdvancePointer(1);
 			if (type < 0x80) // positive fixint
 				return (float)type;
-			else if (type > 0xDF) // negative fixint
-				return (float)unchecked((sbyte)type);
+			else if (type > 0xA0) // fixstr
+			{
+				if (type < 0xC0)
+					return float.Parse(ReadString((uint)type - 0xA0));
+				else if (type > 0xDF)
+					return (float)(sbyte)type; // negative fixint
+			}
 
 			switch (type)
 			{
@@ -276,8 +323,20 @@ namespace CitizenFX.MsgPack
 				case 0xd1: return (float)ReadInt16();
 				case 0xd2: return (float)ReadInt32();
 				case 0xd3: return (float)ReadInt64();
-				default: return (float)0;
+
+				case 0xd4: return (float)ReadExtraTypeAsFloat32(1);
+				case 0xd5: return (float)ReadExtraTypeAsFloat32(2);
+				case 0xd6: return (float)ReadExtraTypeAsFloat32(4);
+				case 0xd7: return (float)ReadExtraTypeAsFloat32(8);
+				case 0xd8: return (float)ReadExtraTypeAsFloat32(16);
+
+				case 0xd9: return float.Parse(ReadString(ReadUInt8()));
+				case 0xda: return float.Parse(ReadString(ReadUInt16()));
+				case 0xdb: return float.Parse(ReadString(ReadUInt32()));
 			}
+
+			SkipObject((byte)type);
+			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(float)}");
 		}
 
 		public unsafe double DeserializeToFloat64()
@@ -285,8 +344,13 @@ namespace CitizenFX.MsgPack
 			byte type = *AdvancePointer(1);
 			if (type < 0x80) // positive fixint
 				return (double)type;
-			else if (type > 0xDF) // negative fixint
-				return (float)unchecked((sbyte)type);
+			else if (type > 0xA0) // fixstr
+			{
+				if (type < 0xC0)
+					return double.Parse(ReadString((uint)type - 0xA0));
+				else if (type > 0xDF)
+					return (double)(sbyte)type; // negative fixint
+			}
 
 			switch (type)
 			{
@@ -303,8 +367,20 @@ namespace CitizenFX.MsgPack
 				case 0xd1: return (double)ReadInt16();
 				case 0xd2: return (double)ReadInt32();
 				case 0xd3: return (double)ReadInt64();
-				default: return (double)0;
+
+				case 0xd4: return (double)ReadExtraTypeAsFloat32(1);
+				case 0xd5: return (double)ReadExtraTypeAsFloat32(2);
+				case 0xd6: return (double)ReadExtraTypeAsFloat32(4);
+				case 0xd7: return (double)ReadExtraTypeAsFloat32(8);
+				case 0xd8: return (double)ReadExtraTypeAsFloat32(16);
+
+				case 0xd9: return double.Parse(ReadString(ReadUInt8()));
+				case 0xda: return double.Parse(ReadString(ReadUInt16()));
+				case 0xdb: return double.Parse(ReadString(ReadUInt32()));
 			}
+
+			SkipObject((byte)type);
+			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(double)}");
 		}
 
 		#endregion

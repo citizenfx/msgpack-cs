@@ -167,10 +167,8 @@ namespace CitizenFX.MsgPack
 			throw new InvalidOperationException($"Tried to decode invalid MsgPack type {type}");
 		}
 
-		internal unsafe void SkipObject()
+		internal unsafe void SkipObject(byte type)
 		{
-			var type = ReadByte();
-
 			if (type < 0xC0)
 			{
 				if (type < 0x90)
@@ -229,6 +227,9 @@ namespace CitizenFX.MsgPack
 
 			throw new InvalidOperationException($"Tried to decode invalid MsgPack type {type}");
 		}
+
+		internal void SkipObject() => SkipObject(ReadByte());
+			
 
 		internal IDictionary<string, object> ReadMap(uint length)
 		{
@@ -316,8 +317,8 @@ namespace CitizenFX.MsgPack
 
 			if (!BitConverter.IsLittleEndian)
 			{
-				v = (v >> 16) | (v << 16); // swap adjacent 16-bit blocks
-				v = ((v & 0xFF00FF00u) >> 8) | ((v & 0x00FF00FFu) << 8); // swap adjacent 8-bit blocks
+				v = unchecked((v >> 16) | (v << 16)); // swap adjacent 16-bit blocks
+				v = unchecked(((v & 0xFF00FF00u) >> 8) | ((v & 0x00FF00FFu) << 8)); // swap adjacent 8-bit blocks
 			}
 
 			return *(float*)&v;
@@ -387,20 +388,31 @@ namespace CitizenFX.MsgPack
 			sbyte* v = (sbyte*)AdvancePointer(length);
 			return new string(v, 0, (int)length);
 		}
+
 		internal unsafe CString ReadCString(uint length)
 		{
 			byte* v = AdvancePointer(length);
 			return CString.Create(v, length);
 		}
 
-		internal unsafe void SkipString(uint length) => AdvancePointer(length);
-
-		/*[SecuritySafeCritical]
-		private unsafe CString ReadCString(uint length)
+		internal unsafe bool ReadStringAsTrueish(uint length)
 		{
-			byte* v = AdvancePointer(length);
-			return CString.Create(v, length);
-		}*/
+			sbyte* v = (sbyte*)AdvancePointer(length);
+
+			if (length == 1)
+				return v[0] == (byte)'1';
+			else if (length == 4)
+			{
+				return v[0] == (byte)'t'
+					&& v[1] == (byte)'r'
+					&& v[2] == (byte)'u'
+					&& v[3] == (byte)'e';
+			}
+
+			return false;
+		}
+
+		internal unsafe void SkipString(uint length) => AdvancePointer(length);
 
 		internal object ReadExtraType(uint length)
 		{
@@ -414,8 +426,10 @@ namespace CitizenFX.MsgPack
 				case 21: return ReadVector3();
 				case 22: return ReadVector4();
 				case 23: return ReadQuaternion();
-				default: throw new InvalidOperationException($"Extension type {extType} not supported.");
 			}
+
+			SkipExtraType(length);
+			throw new InvalidOperationException($"Extension type {extType} not supported.");
 		}
 
 		internal string ReadExtraTypeToString(uint length)
@@ -431,25 +445,43 @@ namespace CitizenFX.MsgPack
 				case 21: return ReadVector3().ToString();
 				case 22: return ReadVector4().ToString();
 				case 23: return ReadQuaternion().ToString();
-				default: throw new InvalidOperationException($"Extension type {extType} not supported.");
 			}
+			
+			SkipExtraType(length);
+			throw new InvalidOperationException($"Extension type {extType} not supported.");
 		}
 
-		internal void SkipExtraType(uint length)
+		internal long ReadExtraTypeAsInt64(uint length)
 		{
 			var extType = ReadByte();
 			switch (extType)
 			{
-				case 10: // remote funcref
-				case 11: // local funcref
-					SkipCallback(length); return;
-				case 20: SkipVector2(); return;
-				case 21: SkipVector3(); return;
-				case 22: SkipVector4(); return;
-				case 23: SkipQuaternion(); return;
-				default: throw new InvalidOperationException($"Extension type {extType} not supported.");
+				case 20: return (long)ReadVector2().X;
+				case 21: return (long)ReadVector3().X;
+				case 22: return (long)ReadVector4().X;
+				case 23: return (long)ReadQuaternion().X;
 			}
+
+			SkipExtraType(length);
+			throw new InvalidOperationException($"Extension type {extType} not supported.");
 		}
+
+		internal float ReadExtraTypeAsFloat32(uint length)
+		{
+			var extType = ReadByte();
+			switch (extType)
+			{
+				case 20: return ReadVector2().X;
+				case 21: return ReadVector3().X;
+				case 22: return ReadVector4().X;
+				case 23: return ReadQuaternion().X;
+			}
+
+			SkipExtraType(length);
+			throw new InvalidOperationException($"Extension type {extType} not supported.");
+		}
+
+		internal unsafe void SkipExtraType(uint length) => AdvancePointer(length + 1);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal Callback ReadCallback(uint length)
