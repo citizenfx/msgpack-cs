@@ -34,6 +34,12 @@ namespace CitizenFX.MsgPack.Detail
 			set => array[index] = index < Count ? value : throw new IndexOutOfRangeException();
 		}
 
+		public T this[uint index]
+		{
+			get => index < Count ? array[index] : throw new IndexOutOfRangeException();
+			set => array[index] = index < Count ? value : throw new IndexOutOfRangeException();
+		}
+
 		public T[] AcquireArray()
 		{
 			T[] arr = array;

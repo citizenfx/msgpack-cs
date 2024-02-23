@@ -7,6 +7,7 @@ using System.Linq;
 
 using static CitizenFX.MsgPack.Detail.Helper;
 using CitizenFX.MsgPack.Detail;
+using System.Runtime.InteropServices;
 
 namespace CitizenFX.MsgPack.Formatters
 {
@@ -104,29 +105,24 @@ namespace CitizenFX.MsgPack.Formatters
 			{
 				var g = methodSerialize.GetILGenerator();
 
-				var allMembers = type.GetMembers(BindingFlags.Instance | BindingFlags.Public);
-
 				if (type.GetCustomAttribute<MsgPackSerializableAttribute>() is MsgPackSerializableAttribute serializable && serializable.Layout != Layout.Default)
 				{
 					switch (serializable.Layout)
 					{
 						case Layout.Indexed:
 							{
-								uint indexSize = allMembers.Max(m => m.GetCustomAttribute<IndexAttribute>()?.Index + 1 ?? 0);
-								MemberInfo[] members = new MemberInfo[indexSize];
+								var allMembers = GetMembersIndexed(type);
+								var members = new MemberInfo[allMembers.Count];
 
-								for (uint i = 0; i < allMembers.Length; ++i)
+								for (uint i = 0; i < allMembers.Count; ++i)
 								{
 									var member = allMembers[i];
-									if ((member.MemberType & (MemberTypes.Field | MemberTypes.Property)) != 0)
+									if (member.GetCustomAttribute<IndexAttribute>() is IndexAttribute index)
 									{
-										if (member.GetCustomAttribute<IndexAttribute>() is IndexAttribute index)
-										{
-											if (members[index.Index] == null)
-												members[index.Index] = member;
-											else
-												throw new FormatException($"Duplicate index, can't add {member.Name} in slot {index.Index} as it's already taken by {members[index.Index].Name}");
-										}
+										if (members[index.Index] == null)
+											members[index.Index] = member;
+										else
+											throw new FormatException($"Duplicate index, can't add {member.Name} in slot {index.Index} as it's already taken by {members[index.Index].Name}");
 									}
 								}
 
@@ -135,24 +131,14 @@ namespace CitizenFX.MsgPack.Formatters
 							break;
 
 						case Layout.Keyed:
-							{
-								MemberInfo[] members = Array.FindAll(allMembers, m =>
-									(m.MemberType & (MemberTypes.Field | MemberTypes.Property)) != 0
-									&& m.GetCustomAttribute<KeyAttribute>() is KeyAttribute);
-
-								BuildSerializeMapBody(type, g, members, methodSerialize);
-							}
+							BuildSerializeMapBody(type, g, GetMembersMapped(type), methodSerialize);
 							break;
 					}
 
 				}
 				else // no custom layout, fall back to serializing all public fields and properties (verbose)
 				{
-					MemberInfo[] members = Array.FindAll(allMembers, m =>
-						(m.MemberType & (MemberTypes.Field | MemberTypes.Property)) != 0
-						&& m.GetCustomAttribute<IgnoreAttribute>() == null);
-
-					BuildSerializeMapBody(type, g, members, methodSerialize);
+					BuildSerializeMapBody(type, g, GetMembersDefault(type), methodSerialize);
 				}
 
 				g.Emit(OpCodes.Ret);
@@ -234,15 +220,15 @@ namespace CitizenFX.MsgPack.Formatters
 		/// </summary>
 		/// <param name="members">Filtered by <see cref="KeyAttribute"/>, null values are ignored</param>
 		/// <inheritdoc cref="BuildSerializeArrayBody"/>
-		private static void BuildSerializeMapBody(Type type, ILGenerator g, MemberInfo[] members, MethodInfo currentSerializer)
+		private static void BuildSerializeMapBody(Type type, ILGenerator g, DynamicArray<MemberInfo> members, MethodInfo currentSerializer)
 		{
 			var methodStringSerializer = typeof(MsgPackSerializer).GetMethod("Serialize", new Type[] { typeof(string) });
 
 			// write header
-			g.Emit(OpCodes.Ldc_I4, members.Length);
+			g.Emit(OpCodes.Ldc_I4, members.Count);
 			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteMapHeader", new[] { typeof(uint) }), null);
 
-			for (uint i = 0; i < members.Length; ++i)
+			for (uint i = 0; i < members.Count; ++i)
 			{
 				switch (members[i])
 				{
@@ -487,13 +473,16 @@ namespace CitizenFX.MsgPack.Formatters
 
 		private static void BuildDeserializeStringBody(ILGenerator g, Type type, Label[] labels, Label fixStrLabel, Label defaultLabel)
 		{
-			ConstructorInfo constructorString = type.GetConstructor(new Type[] { typeof(string) });
+			ConstructorInfo constructorString = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public	| BindingFlags.NonPublic,
+				null, CallingConventions.HasThis, new Type[] { typeof(string) }, null);
+
 			if (constructorString != null)
 			{
 				Label stringType = g.DefineLabel();
 
 				// 0xa0 - 0xbf
 				g.MarkLabel(fixStrLabel);
+				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Ldloc_0);
 				g.Emit(OpCodes.Ldc_I4, 0xa0);
 				g.Emit(OpCodes.Sub);
@@ -502,22 +491,24 @@ namespace CitizenFX.MsgPack.Formatters
 				// case 0xd9: string with 8 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str8]);
 				g.Emit(OpCodes.Ldarg_0);
+				g.Emit(OpCodes.Dup);
 				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
 				g.Emit(OpCodes.Br, stringType);
 
 				// case 0xda: string with 16 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str16]);
 				g.Emit(OpCodes.Ldarg_0);
+				g.Emit(OpCodes.Dup);
 				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
 				g.Emit(OpCodes.Br, stringType);
 
 				// case 0xdb: string with 32 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str32]);
 				g.Emit(OpCodes.Ldarg_0);
+				g.Emit(OpCodes.Dup);
 				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
 
 				g.MarkLabel(stringType);
-				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, GetResultMethod<uint, string>(MsgPackDeserializer.ReadString), null);
 				g.Emit(OpCodes.Newobj, constructorString);
 				g.Emit(OpCodes.Ret);
@@ -560,9 +551,7 @@ namespace CitizenFX.MsgPack.Formatters
 			// Allow construction by arrays when the type is marked as indexed
 			if (layout == Layout.Indexed)
 			{
-				var members = new Detail.DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
-				members.RemoveAll(m => (m.MemberType & (MemberTypes.Field | MemberTypes.Property)) == 0
-					|| (m.GetCustomAttribute<IgnoreAttribute>() != null && m.GetCustomAttribute<IndexAttribute>() == null));
+				var members = GetMembersIndexed(type);
 				members.Sort((l, r) => (long)l.GetCustomAttribute<IndexAttribute>().Index - r.GetCustomAttribute<IndexAttribute>().Index);
 
 				Type[] constructionTypes = new Type[members.Count];
@@ -679,18 +668,7 @@ namespace CitizenFX.MsgPack.Formatters
 			ConstructorInfo constructor = type.GetConstructor(Type.EmptyTypes);
 			if (constructor != null || type.IsValueType)
 			{
-				var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
-				if (layout == Layout.Keyed)
-				{
-					members.RemoveAll(m => (m.MemberType & (MemberTypes.Field | MemberTypes.Property)) == 0
-						|| (m.GetCustomAttribute<IgnoreAttribute>() != null && m.GetCustomAttribute<KeyAttribute>() == null));
-				}
-				else
-				{
-					members.RemoveAll(m => (m.MemberType & (MemberTypes.Field | MemberTypes.Property)) == 0
-						|| (m.GetCustomAttribute<IgnoreAttribute>() != null));
-				}
-
+				var members = layout == Layout.Keyed ? GetMembersMapped(type) : GetMembersIndexed(type);
 				members.Sort((l, r) => (l.Name.Length - r.Name.Length) * 1024 + l.Name.CompareTo(r.Name));
 
 				Label mapType = g.DefineLabel();
@@ -800,6 +778,8 @@ namespace CitizenFX.MsgPack.Formatters
 
 						if (member is FieldInfo field)
 						{
+							Debug.WriteLine($"{field.FieldType} {field.Name}");
+
 							if (type.IsValueType)
 								g.Emit(OpCodes.Ldloca_S, (byte)2);
 							else
@@ -812,6 +792,7 @@ namespace CitizenFX.MsgPack.Formatters
 						else
 						{
 							var property = member as PropertyInfo;
+							Debug.WriteLine($"{property.PropertyType} {property.Name}");
 							if (type.IsValueType)
 								g.Emit(OpCodes.Ldloca_S, (byte)2);
 							else
@@ -1185,6 +1166,33 @@ namespace CitizenFX.MsgPack.Formatters
 		#endregion
 
 		#region General / Helper
+		private static DynamicArray<MemberInfo> GetMembersDefault(Type type)
+		{
+			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
+			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite && p.GetMethod?.GetParameters().Length == 0))
+					&& m.GetCustomAttribute<IgnoreAttribute>() == null));
+
+			return members;
+		}
+
+		private static DynamicArray<MemberInfo> GetMembersMapped(Type type)
+		{
+			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
+			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite && p.GetMethod?.GetParameters().Length == 0))
+					&& m.GetCustomAttribute<IgnoreAttribute>() == null
+					&& m.GetCustomAttribute<KeyAttribute>() != null));
+
+			return members;
+		}
+
+		private static DynamicArray<MemberInfo> GetMembersIndexed(Type type)
+		{
+			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
+			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite && p.GetMethod?.GetParameters().Length == 0))
+				&& m.GetCustomAttribute<IgnoreAttribute>() == null));
+
+			return members;
+		}
 
 		private static void Store(ILGenerator g, byte size, OpCode storeLoc)
 		{
