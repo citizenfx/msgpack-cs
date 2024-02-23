@@ -795,7 +795,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 						g.Emit(OpCodes.Dup); // duplicate CString
 						g.Emit(OpCodes.Ldstr, member.Name);
-						g.EmitCall(OpCodes.Call, ((Func<CString, string, bool>)CString.CompareASCII).Method, null);
+						g.EmitCall(OpCodes.Call, ((Func<CString, string, bool>)CString.CompareASCIICaseInsensitive).Method, null);
 						g.Emit(OpCodes.Brfalse, lblNotThisMember);
 
 						if (member is FieldInfo field)

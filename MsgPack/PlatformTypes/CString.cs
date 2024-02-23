@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CitizenFX.MsgPack
 {
@@ -175,5 +171,45 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
+		/// <inheritdoc cref="CompareASCII(CString, string)"/>
+		/// <remarks>Case insensitive variant of <see cref="CompareASCII(CString, string)"/></remarks>
+		[SecuritySafeCritical]
+		public static unsafe bool CompareASCIICaseInsensitive(CString left, string right)
+		{
+			if (left == null && right == null)
+				return true;
+			else
+			{
+				fixed (byte* lPin = left.value)
+				fixed (char* rPin = right)
+				{
+					byte* l = lPin, lEnd = lPin + left.value.Length - 1;
+					char* r = rPin, rEnd = rPin + right.Length;
+					while (l < lEnd && r < rEnd)
+					{
+						char c1 = *r++;
+						if (c1 > 0x7F || !ToLowerEquals((byte)c1, *l++))
+							return false;
+					}
+				}
+
+				return true;
+			}
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private static bool ToLowerEquals(byte l, byte r)
+		{
+			const uint offset = 'A';
+			const byte toLower = 'a' - 'A';
+
+			if (l - offset < 26)
+				l += toLower;
+
+			if (r - offset < 26)
+				r += toLower;
+
+			return l == r;
+		}
 	}
 }
