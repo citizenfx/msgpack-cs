@@ -234,6 +234,16 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
+		public unsafe void Serialize(string[] v)
+		{
+			WriteArrayHeader((uint)v.Length);
+
+			for (int i = 0; i < v.Length; ++i)
+			{
+				Serialize(v[i]);
+			}
+		}
+
 		internal void WriteMapHeader(uint v)
 		{
 			if (v < (MsgPackCode.FixMapMax - MsgPackCode.FixMapMin))
