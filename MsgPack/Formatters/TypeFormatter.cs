@@ -778,8 +778,6 @@ namespace CitizenFX.MsgPack.Formatters
 
 						if (member is FieldInfo field)
 						{
-							Debug.WriteLine($"{field.FieldType} {field.Name}");
-
 							if (type.IsValueType)
 								g.Emit(OpCodes.Ldloca_S, (byte)2);
 							else
@@ -792,7 +790,6 @@ namespace CitizenFX.MsgPack.Formatters
 						else
 						{
 							var property = member as PropertyInfo;
-							Debug.WriteLine($"{property.PropertyType} {property.Name}");
 							if (type.IsValueType)
 								g.Emit(OpCodes.Ldloca_S, (byte)2);
 							else
