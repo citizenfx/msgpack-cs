@@ -162,7 +162,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 			// write header
 			g.Emit(OpCodes.Ldc_I4, members.Length);
-			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteArrayHeader", new[] { typeof(uint) }), null);
+			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteArrayHeader", BindingFlags.Instance | BindingFlags.NonPublic), null);
 
 			for (uint i = 0; i < members.Length; ++i)
 			{
@@ -226,7 +226,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 			// write header
 			g.Emit(OpCodes.Ldc_I4, members.Count);
-			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteMapHeader", new[] { typeof(uint) }), null);
+			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteMapHeader", BindingFlags.Instance | BindingFlags.NonPublic), null);
 
 			for (uint i = 0; i < members.Count; ++i)
 			{

@@ -4,8 +4,12 @@ using System.Collections.Generic;
 
 namespace CitizenFX.MsgPack
 {
+	/// <summary>
+	/// Serializer class to serialize any data to the MsgPack format.
+	/// </summary>
 	public class MsgPackSerializer
 	{
+		// TODO: look into and profile non-pinned alternatives for interop with C++
 		byte[] m_buffer;
 		ulong m_position;
 
@@ -31,7 +35,7 @@ namespace CitizenFX.MsgPack
 			m_position = 0;
 		}
 
-		void EnsureCapacity(uint size)
+		private void EnsureCapacity(uint size)
 		{
 			ulong requiredCapacity = m_position + size;
 			if (requiredCapacity >= (ulong)m_buffer.LongLength)
@@ -53,6 +57,13 @@ namespace CitizenFX.MsgPack
 		}
 
 		public void Serialize(object v) => MsgPackRegistry.Serialize(this, v);
+
+		public static byte[] SerializeToByteArray(object value)
+		{
+			var serializer = new MsgPackSerializer();
+			serializer.Serialize(value);
+			return serializer.ToArray();
+		}
 
 		public void Serialize(sbyte v)
 		{
@@ -223,7 +234,7 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
-		public void WriteMapHeader(uint v)
+		internal void WriteMapHeader(uint v)
 		{
 			if (v < (MsgPackCode.FixMapMax - MsgPackCode.FixMapMin))
 				Write(unchecked((byte)((uint)MsgPackCode.FixMapMin + v)));
@@ -233,7 +244,7 @@ namespace CitizenFX.MsgPack
 				WriteBigEndian(MsgPackCode.Map32, v);
 		}
 
-		public void WriteArrayHeader(uint v)
+		internal void WriteArrayHeader(uint v)
 		{
 			if (v < (MsgPackCode.FixArrayMax - MsgPackCode.FixArrayMin))
 				Write(unchecked((byte)((uint)MsgPackCode.FixArrayMin + v)));

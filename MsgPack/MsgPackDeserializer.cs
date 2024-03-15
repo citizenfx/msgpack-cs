@@ -279,6 +279,18 @@ namespace CitizenFX.MsgPack
 			return retobject;
 		}
 
+		internal string[] ReadStringArray(uint length)
+		{
+			string[] retobject = new string[length];
+
+			for (var i = 0; i < length; i++)
+			{
+				retobject[i] = DeserializeToString();
+			}
+
+			return retobject;
+		}
+
 		internal unsafe void SkipArray(uint length)
 		{
 			for (var i = 0; i < length; i++)

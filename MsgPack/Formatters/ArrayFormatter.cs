@@ -38,7 +38,7 @@ namespace CitizenFX.MsgPack.Formatters
 						// write header
 						g.Emit(OpCodes.Ldarg_0);
 						g.Emit(OpCodes.Ldloc_0);
-						g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteArrayHeader", new[] { typeof(uint) }), null);
+						g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteArrayHeader", BindingFlags.Instance | BindingFlags.NonPublic), null);
 
 						// i = 0
 						g.Emit(OpCodes.Ldc_I4_0);

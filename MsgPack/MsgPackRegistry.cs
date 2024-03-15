@@ -51,7 +51,7 @@ namespace CitizenFX.MsgPack
 		private static readonly Dictionary<Type, Serializer> m_serializers = new Dictionary<Type, Serializer>();
 		private static readonly Dictionary<Type, MethodInfo> m_deserializers = new Dictionary<Type, MethodInfo>();
 
-		internal static readonly AssemblyBuilder m_assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("AwaitResearch"), AssemblyBuilderAccess.RunAndCollect);
+		internal static readonly AssemblyBuilder m_assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("CitizenFX.MsgPack.Dynamic"), AssemblyBuilderAccess.RunAndCollect);
 		internal static readonly ModuleBuilder m_moduleBuilder = m_assemblyBuilder.DefineDynamicModule("main");
 
 		static MsgPackRegistry()

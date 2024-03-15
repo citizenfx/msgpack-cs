@@ -46,7 +46,7 @@ namespace CitizenFX.MsgPack.Formatters
 						g.EmitCall(OpCodes.Callvirt, typeIReadOnlyCollection.GetProperty("Count", Type.EmptyTypes).GetMethod, null);
 
 						// write header
-						g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteMapHeader", new[] { typeof(uint) }), null);
+						g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteMapHeader", BindingFlags.Instance | BindingFlags.NonPublic), null);
 
 						// get dictionary enumerator
 						g.Emit(OpCodes.Ldarg_1);

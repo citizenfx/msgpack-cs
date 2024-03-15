@@ -35,5 +35,6 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
 
+[assembly: InternalsVisibleTo("CitizenFX.MsgPack.Dynamic")]
 [assembly: InternalsVisibleTo("MsgPack.Benchmarks")]
 [assembly: InternalsVisibleTo("MsgPack.Tests")]
