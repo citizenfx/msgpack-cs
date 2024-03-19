@@ -66,6 +66,27 @@ namespace CitizenFX.MsgPack.Tests
 			var result = deserializer.Deserialize<List<T>>();
 			Assert.IsTrue(result == expected || result.SequenceEqual(expected));
 		}
+
+		public static void Validate<K, V>(this ref MsgPackDeserializer deserializer, Dictionary<K, V> expected)
+		{
+			var result = deserializer.Deserialize<Dictionary<K, V>>();
+			if (result == expected)
+				return;
+
+			if (expected?.Count != result?.Count)
+				Assert.Fail("Counts aren't the same");
+
+			foreach (var p in expected)
+			{
+				if (result.TryGetValue(p.Key, out var v))
+				{
+					if (!p.Value.Equals(v))
+						Assert.Fail($"expected[{p.Key}]'s value '{p.Value}' does not equal '{v}'.");
+				}
+				else
+					Assert.Fail($"Key {p.Key} does not exist in deserialized dictionary.");
+			}
+		}
 	}
 
 	[TestClass]
@@ -75,6 +96,7 @@ namespace CitizenFX.MsgPack.Tests
 		{
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(uint[]));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(List<uint>));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(Dictionary<string, uint>));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Player));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector2));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector3));
@@ -240,6 +262,29 @@ namespace CitizenFX.MsgPack.Tests
 				deserializer.Validate(new uint[] { 0, 0 });
 				deserializer.Validate(null as uint[]);
 				deserializer.Validate(new List<uint> { 62, 104 });
+			}
+		}
+
+		[TestMethod]
+		public unsafe void DeserializeDictionaryStringUInt32()
+		{
+			byte[] input = new byte[] {
+				0x97, // fixarray, size 7 (this calling code must abide by this number, but we don't need to for these testing purposes)
+				0x84, 0xa1, (byte)'1', 0xcc, 0xFE, 0xa1, (byte)'2', 0xcc, 0xFD, 0xa1, (byte)'3', 0xcc, 0xFC, 0xa1, (byte)'4', 0xcc, 0x3,
+				0xcc, 0xFE,
+				0x82, 0xa2, (byte)'h', (byte)'i', 0xcc, 0x68, 0xa3, (byte)'b', (byte)'y', (byte)'e', 0xcc, 0x3E,
+				0xc0,
+			};
+
+			fixed (byte* ptr = input)
+			{
+				var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
+				deserializer.ValidateArrayHeader();
+
+				deserializer.Validate(new Dictionary<string, uint> { { "1", 254 }, { "2", 253 }, { "3", 252 }, { "4", 3 } });
+				deserializer.ValidateException<uint[], InvalidCastException>();
+				deserializer.Validate(new Dictionary<string, uint> { { "hi", 104 }, { "bye", 62 } });
+				deserializer.Validate(null as Dictionary<string, uint>);
 			}
 		}
 	}

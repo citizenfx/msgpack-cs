@@ -121,8 +121,6 @@ namespace CitizenFX.MsgPack.Formatters
 
 		private static MethodInfo BuildDeserializer(Type type, Type typeArray, TypeBuilder typeBuilder)
 		{
-			Console.WriteLine($"BuildDeserializer {type} {typeArray}");
-
 			MethodBuilder methodDeserialize = typeBuilder.DefineMethod("Deserialize",
 				MethodAttributes.Public | MethodAttributes.Static,
 				typeArray, new[] { typeof(MsgPackDeserializer).MakeByRefType() });

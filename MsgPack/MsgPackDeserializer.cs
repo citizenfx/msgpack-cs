@@ -232,7 +232,6 @@ namespace CitizenFX.MsgPack
 
 		internal uint ReadArraySize(byte type)
 		{
-
 			// should start with an array
 			if (type >= 0x90 && type < 0xA0)
 				return type % 16u;
@@ -245,6 +244,19 @@ namespace CitizenFX.MsgPack
 		}
 
 		internal uint ReadArraySize() => ReadArraySize(ReadByte());
+
+		internal uint ReadMapSize(byte type)
+		{
+			// should start with a map
+			if (type >= 0x80 && type < 0x90)
+				return type % 16u;
+			else if (type == 0xDE)
+				return ReadUInt16();
+			else if (type == 0xDF)
+				return ReadUInt32();
+
+			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into a non-associative-array type");
+		}
 
 		#endregion
 
@@ -382,6 +394,7 @@ namespace CitizenFX.MsgPack
 
 		public static uint ReadArraySize(ref MsgPackDeserializer deserializer) => deserializer.ReadArraySize();
 		public static uint ReadArraySize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadArraySize(type);
+		public static uint ReadMapSize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadMapSize(type);
 
 		public static byte ReadByte(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
 		public static float ReadSingle(ref MsgPackDeserializer deserializer) => deserializer.ReadSingle();

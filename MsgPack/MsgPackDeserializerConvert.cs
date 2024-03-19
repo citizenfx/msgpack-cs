@@ -252,7 +252,7 @@ namespace CitizenFX.MsgPack
 				if (type < 0xC0)
 					return uint.Parse(ReadString((uint)type - 0xA0));
 				else if (type > 0xDF)
-					return (uint)(sbyte)type; // fix negative number
+					return unchecked((uint)(sbyte)type); // fix negative number
 			}
 
 			switch (type)
@@ -296,7 +296,7 @@ namespace CitizenFX.MsgPack
 				if (type < 0xC0)
 					return ulong.Parse(ReadString((uint)type - 0xA0));
 				else if (type > 0xDF)
-					return (ulong)(type - 256); // fix negative number
+					return unchecked((ulong)(sbyte)type); // fix negative number
 			}
 
 			switch (type)
@@ -340,7 +340,7 @@ namespace CitizenFX.MsgPack
 				if (type < 0xC0)
 					return int.Parse(ReadString((uint)type - 0xA0));
 				else if (type > 0xDF)
-					return (int)(sbyte)type; // fix negative number
+					return unchecked((int)(sbyte)type); // fix negative number
 			}
 
 			switch (type)
@@ -384,7 +384,7 @@ namespace CitizenFX.MsgPack
 				if (type < 0xC0)
 					return long.Parse(ReadString((uint)type - 0xA0));
 				else if (type > 0xDF)
-					return (long)(sbyte)type; // fix negative number
+					return unchecked((long)(sbyte)type); // fix negative number
 			}
 
 			switch (type)
@@ -428,7 +428,7 @@ namespace CitizenFX.MsgPack
 				if (type < 0xC0)
 					return float.Parse(ReadString((uint)type - 0xA0));
 				else if (type > 0xDF)
-					return (float)(sbyte)type; // negative fixint
+					return unchecked((float)(sbyte)type); // negative fixint
 			}
 
 			switch (type)
@@ -472,7 +472,7 @@ namespace CitizenFX.MsgPack
 				if (type < 0xC0)
 					return double.Parse(ReadString((uint)type - 0xA0));
 				else if (type > 0xDF)
-					return (double)(sbyte)type; // negative fixint
+					return unchecked((double)(sbyte)type); // negative fixint
 			}
 
 			switch (type)
