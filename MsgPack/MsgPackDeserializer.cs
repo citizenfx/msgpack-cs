@@ -22,297 +22,14 @@ namespace CitizenFX.MsgPack
 		private readonly unsafe byte* m_end;
 		private readonly string m_netSource;
 
-		public unsafe MsgPackDeserializer(byte* data, ulong size, string netSource)
+		internal unsafe MsgPackDeserializer(byte* data, ulong size, string netSource)
 		{
 			m_ptr = data;
 			m_end = data + size;
 			m_netSource = netSource;
 		}
 
-		internal static unsafe object Deserialize(byte[] data, string netSource = null)
-		{
-			if (data?.Length > 0)
-			{
-				fixed (byte* dataPtr = data)
-					return Deserialize(dataPtr, data.Length, netSource);
-			}
-
-			return null;
-		}
-
-		internal static unsafe object Deserialize(byte* data, long size, string netSource = null)
-		{
-			if (data != null && size > 0)
-			{
-				var deserializer = new MsgPackDeserializer(data, (ulong)size, netSource);
-				return deserializer.Deserialize();
-			}
-
-			return null;
-		}
-
-		/// <summary>
-		/// Starts deserialization from an array type
-		/// </summary>
-		/// <param name="data">ptr to byte data</param>
-		/// <param name="size">size of byte data</param>
-		/// <param name="netSource">from whom came this?</param>
-		/// <returns>arguments that can be passed into dynamic delegates</returns>
-		public static unsafe object[] DeserializeArray(byte* data, long size, string netSource = null)
-		{
-			if (data != null && size > 0)
-			{
-				var deserializer = new MsgPackDeserializer(data, (ulong)size, netSource);
-				return deserializer.DeserializeArray();
-			}
-
-			return new object[0];
-		}
-
-		private unsafe object[] DeserializeArray()
-		{
-			int length;
-			var type = ReadByte();
-
-			// should start with an array
-			if (type >= 0x90 && type < 0xA0)
-				length = type % 16;
-			else if (type == 0xDC)
-				length = ReadUInt16();
-			else if (type == 0xDD)
-				length = ReadInt32();
-			else
-				return new object[0];
-
-			object[] array = new object[length];
-			for (var i = 0; i < length; ++i)
-			{
-				array[i] = Deserialize();
-			}
-
-			return array;
-		}
-
-		public object Deserialize()
-		{
-			var type = ReadByte();
-
-			if (type < 0xC0)
-			{
-				if (type < 0x80)
-				{
-					return type;
-				}
-				else if (type < 0x90)
-				{
-					return ReadMap(type % 16u);
-				}
-				else if (type < 0xA0)
-				{
-					return ReadObjectArray(type % 16u);
-				}
-
-				return ReadString(type % 32u);
-			}
-			else if (type > 0xDF)
-			{
-				return type - 256; // fix negative number
-			}
-
-			switch (type)
-			{
-				case 0xC0: return null;
-
-				case 0xC2: return false;
-				case 0xC3: return true;
-
-				case 0xC4: return ReadBytes(ReadUInt8());
-				case 0xC5: return ReadBytes(ReadUInt16());
-				case 0xC6: return ReadBytes(ReadUInt32());
-
-				case 0xC7: return ReadExtraType(ReadUInt8());
-				case 0xC8: return ReadExtraType(ReadUInt16());
-				case 0xC9: return ReadExtraType(ReadUInt32());
-
-				case 0xCA: return ReadSingle();
-				case 0xCB: return ReadDouble();
-
-				case 0xCC: return ReadUInt8();
-				case 0xCD: return ReadUInt16();
-				case 0xCE: return ReadUInt32();
-				case 0xCF: return ReadUInt64();
-
-				case 0xD0: return ReadInt8();
-				case 0xD1: return ReadInt16();
-				case 0xD2: return ReadInt32();
-				case 0xD3: return ReadInt64();
-
-				case 0xD4: return ReadExtraType(1);
-				case 0xD5: return ReadExtraType(2);
-				case 0xD6: return ReadExtraType(4);
-				case 0xD7: return ReadExtraType(8);
-				case 0xD8: return ReadExtraType(16);
-
-				case 0xD9: return ReadString(ReadUInt8());
-				case 0xDA: return ReadString(ReadUInt16());
-				case 0xDB: return ReadString(ReadUInt32());
-
-				case 0xDC: return ReadObjectArray(ReadUInt16());
-				case 0xDD: return ReadObjectArray(ReadUInt32());
-
-				case 0xDE: return ReadMap(ReadUInt16());
-				case 0xDF: return ReadMap(ReadUInt32());
-			}
-
-			throw new InvalidOperationException($"Tried to decode invalid MsgPack type {type}");
-		}
-
-		internal unsafe void SkipObject(byte type)
-		{
-			if (type < 0xC0)
-			{
-				if (type < 0x90)
-					SkipMap(type % 16u);
-				else if (type < 0xA0)
-					SkipArray(type % 16u);
-				else
-					SkipString(type % 32u);
-
-				return;
-			}
-			else if (type > 0xDF)
-			{
-				return;
-			}
-
-			switch (type)
-			{
-				case 0xC4: AdvancePointer(ReadUInt8()); return;
-				case 0xC5: AdvancePointer(ReadUInt16()); return;
-				case 0xC6: AdvancePointer(ReadUInt32()); return;
-
-				case 0xC7: SkipExtraType(ReadUInt8()); return;
-				case 0xC8: SkipExtraType(ReadUInt16()); return;
-				case 0xC9: SkipExtraType(ReadUInt32()); return;
-
-				case 0xCA: AdvancePointer(4); return;
-				case 0xCB: AdvancePointer(8); return;
-
-				case 0xCC: AdvancePointer(1); return;
-				case 0xCD: AdvancePointer(2); return;
-				case 0xCE: AdvancePointer(3); return;
-				case 0xCF: AdvancePointer(4); return;
-
-				case 0xD0: AdvancePointer(1); return;
-				case 0xD1: AdvancePointer(2); return;
-				case 0xD2: AdvancePointer(3); return;
-				case 0xD3: AdvancePointer(4); return;
-
-				case 0xD4: SkipExtraType(1); return;
-				case 0xD5: SkipExtraType(2); return;
-				case 0xD6: SkipExtraType(4); return;
-				case 0xD7: SkipExtraType(8); return;
-				case 0xD8: SkipExtraType(16); return;
-
-				case 0xD9: SkipString(ReadUInt8()); return;
-				case 0xDA: SkipString(ReadUInt16()); return;
-				case 0xDB: SkipString(ReadUInt32()); return;
-
-				case 0xDC: SkipArray(ReadUInt16()); return;
-				case 0xDD: SkipArray(ReadUInt32()); return;
-
-				case 0xDE: SkipMap(ReadUInt16()); return;
-				case 0xDF: SkipMap(ReadUInt32()); return;
-			}
-
-			throw new InvalidOperationException($"Tried to decode invalid MsgPack type {type}");
-		}
-
-		internal void SkipObject() => SkipObject(ReadByte());
-			
-
-		internal IDictionary<string, object> ReadMap(uint length)
-		{
-			var retobject = new ExpandoObject() as IDictionary<string, object>;
-
-			for (var i = 0; i < length; i++)
-			{
-				var key = Deserialize().ToString();
-				var value = Deserialize();
-
-				retobject.Add(key, value);
-			}
-
-			return retobject;
-		}
-
-		internal unsafe void SkipMap(uint length)
-		{
-			for (var i = 0; i < length; i++)
-			{
-				SkipObject();
-				SkipObject();
-			}
-		}
-
-		internal unsafe byte[] ReadBytes(uint length)
-		{
-			var ptr = (IntPtr)AdvancePointer(length);
-
-			byte[] retobject = new byte[length];
-			Marshal.Copy(ptr, retobject, 0, (int)length);
-
-			return retobject;
-		}
-
-		internal unsafe void SkipBytes(uint length) => AdvancePointer(length);
-
-		internal object[] ReadObjectArray(uint length)
-		{
-			object[] retobject = new object[length];
-
-			for (var i = 0; i < length; i++)
-			{
-				retobject[i] = Deserialize();
-			}
-
-			return retobject;
-		}
-
-		internal string[] ReadStringArray(uint length)
-		{
-			string[] retobject = new string[length];
-
-			for (var i = 0; i < length; i++)
-			{
-				retobject[i] = DeserializeToString();
-			}
-
-			return retobject;
-		}
-
-		internal unsafe void SkipArray(uint length)
-		{
-			for (var i = 0; i < length; i++)
-			{
-				SkipObject();
-			}
-		}
-
-		internal uint ReadArraySize()
-		{
-			var type = ReadByte();
-
-			// should start with an array
-			if (type >= 0x90 && type < 0xA0)
-				return type % 16u;
-			else if (type == 0xDC)
-				return ReadUInt16();
-			else if (type == 0xDD)
-				return ReadUInt32();
-
-			throw new InvalidOperationException("Unable to acquire the size of a non-array type");
-		}
+		#region Read basic types
 
 		internal unsafe float ReadSingle()
 		{
@@ -426,6 +143,112 @@ namespace CitizenFX.MsgPack
 
 		internal unsafe void SkipString(uint length) => AdvancePointer(length);
 
+		#endregion
+
+		#region Read complex type operations
+
+		internal IDictionary<string, object> ReadMap(uint length)
+		{
+			var retobject = new ExpandoObject() as IDictionary<string, object>;
+
+			for (var i = 0; i < length; i++)
+			{
+				var key = DeserializeAsString();
+				var value = DeserializeAsObject();
+
+				retobject.Add(key, value);
+			}
+
+			return retobject;
+		}
+
+		internal Dictionary<string, string> ReadDictionaryStringString(uint length)
+		{
+			var retobject = new Dictionary<string, string>();
+
+			for (var i = 0; i < length; i++)
+			{
+				var key = DeserializeAsString();
+				var value = DeserializeAsString();
+
+				retobject.Add(key, value);
+			}
+
+			return retobject;
+		}
+
+		internal unsafe void SkipMap(uint length)
+		{
+			for (var i = 0; i < length; i++)
+			{
+				SkipObject();
+				SkipObject();
+			}
+		}
+
+		internal unsafe byte[] ReadBytes(uint length)
+		{
+			var ptr = (IntPtr)AdvancePointer(length);
+
+			byte[] retobject = new byte[length];
+			Marshal.Copy(ptr, retobject, 0, (int)length);
+
+			return retobject;
+		}
+
+		internal unsafe void SkipBytes(uint length) => AdvancePointer(length);
+
+		internal object[] ReadObjectArray(uint length)
+		{
+			object[] retobject = new object[length];
+
+			for (var i = 0; i < length; i++)
+			{
+				retobject[i] = DeserializeAsObject();
+			}
+
+			return retobject;
+		}
+
+		internal string[] ReadStringArray(uint length)
+		{
+			string[] retobject = new string[length];
+
+			for (var i = 0; i < length; i++)
+			{
+				retobject[i] = DeserializeAsString();
+			}
+
+			return retobject;
+		}
+
+		internal unsafe void SkipArray(uint length)
+		{
+			for (var i = 0; i < length; i++)
+			{
+				SkipObject();
+			}
+		}
+
+		internal uint ReadArraySize()
+		{
+			var type = ReadByte();
+
+			// should start with an array
+			if (type >= 0x90 && type < 0xA0)
+				return type % 16u;
+			else if (type == 0xDC)
+				return ReadUInt16();
+			else if (type == 0xDD)
+				return ReadUInt32();
+
+			throw new InvalidOperationException("Unable to acquire the size of a non-array type");
+		}
+
+		#endregion
+
+		#region Extra types
+
 		internal object ReadExtraType(uint length)
 		{
 			var extType = ReadByte();
@@ -531,6 +354,10 @@ namespace CitizenFX.MsgPack
 		private Quaternion ReadQuaternion() => new Quaternion(ReadSingleLE(), ReadSingleLE(), ReadSingleLE(), ReadSingleLE());
 		private unsafe void SkipQuaternion() => AdvancePointer(4 * sizeof(float));
 
+		#endregion
+
+		#region Buffer pointer control
+
 		internal unsafe RestorePoint CreateRestorePoint() => new RestorePoint(m_ptr);
 		internal unsafe void Restore(RestorePoint restorePoint) => m_ptr = restorePoint.Ptr;
 
@@ -548,7 +375,9 @@ namespace CitizenFX.MsgPack
 			return curPtr;
 		}
 
-		#region statics (easier access)
+		#endregion
+
+		#region Statics (easier access with current IL generation)
 
 		public static uint ReadArraySize(ref MsgPackDeserializer deserializer) => deserializer.ReadArraySize();
 

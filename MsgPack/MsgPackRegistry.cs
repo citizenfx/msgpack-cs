@@ -95,10 +95,18 @@ namespace CitizenFX.MsgPack
 			return type.BaseType != null && ImplementsGenericTypeDefinition(type.BaseType, genericTypeDefinition);
 		}
 
+		/// <summary>
+		/// Find or create the serializer that fits typeof( <paramref name="obj"/>) and call it to serialize the given object
+		/// </summary>
+		/// <param name="serializer"></param>
+		/// <param name="obj"></param>
+		/// <exception cref="SerializationException"></exception>
 		internal static void Serialize(MsgPackSerializer serializer, object obj)
 		{
 			if (obj != null)
 			{
+				// Adding too much checks here could run slower than a hash map lookup, profile accordingly
+
 				Type type = obj.GetType();
 				if (type.IsPrimitive)
 				{
@@ -192,10 +200,6 @@ namespace CitizenFX.MsgPack
 							break;
 						}
 				}
-			}
-			else if (type.IsValueType)
-			{
-				return TypeFormatter.Build(type);
 			}
 			else
 				return TypeFormatter.Build(type);

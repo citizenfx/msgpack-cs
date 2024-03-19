@@ -208,12 +208,12 @@ namespace CitizenFX.MsgPack.Benchmarks
 
 					// Deserialize
 					{
-						deserializer.DeserializeToInt32();
-						deserializer.Deserialize();
-						deserializer.DeserializeToInt32();
-						deserializer.DeserializeToUInt32();
-						deserializer.DeserializeToUInt32();
-						deserializer.DeserializeToUInt64();
+						deserializer.DeserializeAsInt32();
+						deserializer.DeserializeAsObject();
+						deserializer.DeserializeAsInt32();
+						deserializer.DeserializeAsUInt32();
+						deserializer.DeserializeAsUInt32();
+						deserializer.DeserializeAsUInt64();
 						deserializePlayer(deserializer);
 						deserializeVector3(deserializer);
 						deserializeVector2(deserializer);

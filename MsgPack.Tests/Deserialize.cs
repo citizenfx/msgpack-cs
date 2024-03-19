@@ -77,12 +77,12 @@ namespace CitizenFX.MsgPack.Tests
 
 				// Deserialize
 				{
-					Assert.AreEqual(7, deserializer.DeserializeToInt32());
-					Assert.AreEqual(254L, ((IConvertible)deserializer.Deserialize()).ToInt64(null));
-					Assert.AreEqual(16_909_060, deserializer.DeserializeToInt32());
-					Assert.AreEqual(0u, deserializer.DeserializeToUInt32());
-					Assert.AreEqual(0u, deserializer.DeserializeToUInt32());
-					Assert.AreEqual(1uL, deserializer.DeserializeToUInt64());
+					Assert.AreEqual(7, deserializer.DeserializeAsInt32());
+					Assert.AreEqual(254L, ((IConvertible)deserializer.DeserializeAsObject()).ToInt64(null));
+					Assert.AreEqual(16_909_060, deserializer.DeserializeAsInt32());
+					Assert.AreEqual(0u, deserializer.DeserializeAsUInt32());
+					Assert.AreEqual(0u, deserializer.DeserializeAsUInt32());
+					Assert.AreEqual(1uL, deserializer.DeserializeAsUInt64());
 					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
 					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f), CallMethod<Vector3>(deserializer));
 					Assert.AreEqual(new Vector2(1.0f, 2.0f), CallMethod<Vector2>(deserializer));

@@ -9,6 +9,12 @@ namespace CitizenFX.MsgPack
 	/// </summary>
 	public class MsgPackSerializer
 	{
+		/// NOTE:
+		///   1. When adding any Serialize(T) method, make sure there's an equivalent T DeserializeAsT() in the <see cref="MsgPackDeserializer"/> class.
+		///   2. Serialize(T) write headers, sizes, and pick the correct Write*([MsgPackCode,] T) method.
+		///   3. Write*([MsgPackCode,] T) write directly to memory, these should stay private.
+		///   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
+
 		// TODO: look into and profile non-pinned alternatives for interop with C++
 		byte[] m_buffer;
 		ulong m_position;
@@ -46,24 +52,21 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
-		public void Serialize(bool value)
-		{
-			Write(value ? (byte)MsgPackCode.True : (byte)MsgPackCode.False);
-		}
-
-		public void WriteNil()
-		{
-			Write((byte)MsgPackCode.Nil);
-		}
-
-		public void Serialize(object v) => MsgPackRegistry.Serialize(this, v);
-
 		public static byte[] SerializeToByteArray(object value)
 		{
 			var serializer = new MsgPackSerializer();
 			serializer.Serialize(value);
 			return serializer.ToArray();
 		}
+
+		#region Basic type serializtion
+
+		public void Serialize(bool value)
+		{
+			Write(value ? (byte)MsgPackCode.True : (byte)MsgPackCode.False);
+		}
+
+		public void Serialize(object v) => MsgPackRegistry.Serialize(this, v);
 
 		public void Serialize(sbyte v)
 		{
@@ -176,19 +179,6 @@ namespace CitizenFX.MsgPack
 		public unsafe void Serialize(float v) => WriteBigEndian(MsgPackCode.Float32, *(uint*)&v);
 		public unsafe void Serialize(double v) => WriteBigEndian(MsgPackCode.Float64, *(ulong*)&v);
 
-		public void Serialize(IReadOnlyDictionary<string, string> v)
-		{
-			WriteMapHeader((uint)v.Count);
-			foreach (var keyValue in v)
-			{
-				Serialize(keyValue.Key);
-				Serialize(keyValue.Value);
-			}
-		}
-
-		public void Serialize(Dictionary<string, string> v) => Serialize((IReadOnlyDictionary<string, string>)v);
-		public void Serialize(IDictionary<string, string> v) => Serialize((IReadOnlyDictionary<string, string>)v);
-
 		public unsafe void Serialize(string v)
 		{
 			fixed (char* p_value = v)
@@ -234,6 +224,37 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
+		#endregion
+
+		#region Premade associative array serializers
+
+		public void Serialize(IReadOnlyDictionary<string, string> v)
+		{
+			WriteMapHeader((uint)v.Count);
+			foreach (var keyValue in v)
+			{
+				Serialize(keyValue.Key);
+				Serialize(keyValue.Value);
+			}
+		}
+
+		public void Serialize(Dictionary<string, string> v) => Serialize((IReadOnlyDictionary<string, string>)v);
+		public void Serialize(IDictionary<string, string> v) => Serialize((IReadOnlyDictionary<string, string>)v);
+
+		#endregion
+
+		#region Premade array serializers
+
+		public unsafe void Serialize(object[] v)
+		{
+			WriteArrayHeader((uint)v.Length);
+
+			for (int i = 0; i < v.Length; ++i)
+			{
+				Serialize(v[i]);
+			}
+		}
+
 		public unsafe void Serialize(string[] v)
 		{
 			WriteArrayHeader((uint)v.Length);
@@ -243,6 +264,10 @@ namespace CitizenFX.MsgPack
 				Serialize(v[i]);
 			}
 		}
+
+		#endregion
+
+		#region Direct write operations
 
 		internal void WriteMapHeader(uint v)
 		{
@@ -268,6 +293,11 @@ namespace CitizenFX.MsgPack
 		{
 			EnsureCapacity(1);
 			m_buffer[m_position++] = code;
+		}
+
+		public void WriteNil()
+		{
+			Write((byte)MsgPackCode.Nil);
 		}
 
 		private void Write(MsgPackCode code, byte value)
@@ -342,5 +372,7 @@ namespace CitizenFX.MsgPack
 		private void WriteBigEndian(MsgPackCode code, long value) => WriteBigEndian(code, unchecked((ulong)value));
 		private unsafe void WriteBigEndian(MsgPackCode code, float value) => WriteBigEndian(code, *(uint*)&value);
 		private unsafe void WriteBigEndian(MsgPackCode code, double value) => WriteBigEndian(code, *(ulong*)&value);
+
+		#endregion
 	}
 }
