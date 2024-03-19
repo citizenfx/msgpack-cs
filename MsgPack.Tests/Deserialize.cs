@@ -1,39 +1,80 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using CitizenFX.Core;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace CitizenFX.MsgPack.Tests
 {
-	[TestClass]
-	public class Deserialize
-	{
-		public delegate TResult TypeDeserializer<out TResult>(in MsgPackDeserializer arg);
+	public delegate TResult TypeDeserializer<out TResult>(ref MsgPackDeserializer arg);
 
-		public static T CallMethod<T>(in MsgPackDeserializer deserializer)
+	public static class DeserializeExtensions
+	{
+		public static T Deserialize<T>(this ref MsgPackDeserializer deserializer)
 		{
-			if (MsgPackRegistry.TryGetDeserializer(typeof(T), out var deserializeMethod))
-				return ((TypeDeserializer<T>)deserializeMethod.CreateDelegate(typeof(TypeDeserializer<T>)))(deserializer);
-			
-			Assert.Fail();
-			return default;
+			var deleg = MsgPackRegistry.GetOrCreateDeserializer(typeof(T)).CreateDelegate(typeof(TypeDeserializer<T>));
+			return ((TypeDeserializer<T>)deleg)(ref deserializer);
 		}
 
-		public static Exception ReturnException<T>(in MsgPackDeserializer deserializer)
+		public static void ValidateException<T, E>(this ref MsgPackDeserializer deserializer)
 		{
+			var restorePoint = deserializer.CreateRestorePoint();
+
 			try
 			{
-				CallMethod<T>(deserializer);
+				T value = deserializer.Deserialize<T>();
+				Assert.Fail($"Deserialize did not result in an exception, got {value} instead.");
 			}
 			catch (Exception ex)
 			{
-				return ex;
-			}
+				if (!(ex is E))
+					Assert.Fail($"Deserialize threw exception {ex.GetType()} but wasn't the expected {typeof(E)}.");
 
-			return null;
+				deserializer.Restore(restorePoint);
+				deserializer.SkipObject();
+			}
 		}
 
+		public static uint ValidateArrayHeader(this ref MsgPackDeserializer deserializer)
+		{
+			byte type = deserializer.ReadByte();
+
+			if (type >= 0x90 && type < 0xA0)
+				return (uint)(type % 16);
+			else if (type == 0xDC)
+				return deserializer.ReadUInt16();
+			else if (type == 0xDD)
+				return deserializer.ReadUInt32();
+
+			Assert.Fail();
+			throw new AssertFailedException(); // Assert.Fail throws this as well
+		}
+
+		public static void Validate<T>(this ref MsgPackDeserializer deserializer, T expected)
+		{
+			Assert.AreEqual(expected, deserializer.Deserialize<T>());
+		}
+
+		public static void Validate<T>(this ref MsgPackDeserializer deserializer, T[] expected)
+		{
+			var result = deserializer.Deserialize<T[]>();
+			Assert.IsTrue(result == expected || result.SequenceEqual(expected));
+		}
+
+		public static void Validate<T>(this ref MsgPackDeserializer deserializer, List<T> expected)
+		{
+			var result = deserializer.Deserialize<List<T>>();
+			Assert.IsTrue(result == expected || result.SequenceEqual(expected));
+		}
+	}
+
+	[TestClass]
+	public class Deserialize
+	{
 		static Deserialize()
 		{
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(uint[]));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(List<uint>));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Player));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector2));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector3));
@@ -63,33 +104,20 @@ namespace CitizenFX.MsgPack.Tests
 			fixed (byte* ptr = input)
 			{
 				var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
-				byte type = deserializer.ReadByte();
-				uint length;
+				deserializer.ValidateArrayHeader();
 
-				if (type >= 0x90 && type < 0xA0)
-					length = (uint)(type % 16);
-				else if (type == 0xDC)
-					length = deserializer.ReadUInt16();
-				else if (type == 0xDD)
-					length = deserializer.ReadUInt32();
-				else
-					Assert.Fail();
-
-				// Deserialize
-				{
-					Assert.AreEqual(7, deserializer.DeserializeAsInt32());
-					Assert.AreEqual(254L, ((IConvertible)deserializer.DeserializeAsObject()).ToInt64(null));
-					Assert.AreEqual(16_909_060, deserializer.DeserializeAsInt32());
-					Assert.AreEqual(0u, deserializer.DeserializeAsUInt32());
-					Assert.AreEqual(0u, deserializer.DeserializeAsUInt32());
-					Assert.AreEqual(1uL, deserializer.DeserializeAsUInt64());
-					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
-					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f), CallMethod<Vector3>(deserializer));
-					Assert.AreEqual(new Vector2(1.0f, 2.0f), CallMethod<Vector2>(deserializer));
-					Assert.AreEqual(new Vector4(1.0f, 2.0f, 3.0f, 4.0f), CallMethod<Vector4>(deserializer));
-					Assert.AreEqual(56u, CallMethod<Player>(deserializer)?.m_id);
-					Assert.AreEqual(new Vector3(1.0f, 0.0f, 0.0f), CallMethod<Vector3>(deserializer));
-				}
+				deserializer.Validate(7);
+				Assert.AreEqual(254L, ((IConvertible)deserializer.DeserializeAsObject()).ToInt64(null));
+				deserializer.Validate(16_909_060);
+				deserializer.Validate(0u);
+				deserializer.Validate(0u);
+				deserializer.Validate(1uL);
+				deserializer.Validate(new Player(254u));
+				deserializer.Validate(new Vector3(1.0f, 2.0f, 3.0f));
+				deserializer.Validate(new Vector2(1.0f, 2.0f));
+				deserializer.Validate(new Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+				deserializer.Validate(new Player(56u));
+				deserializer.Validate(new Vector3(1.0f, 0.0f, 0.0f));
 			}
 		}
 
@@ -110,29 +138,15 @@ namespace CitizenFX.MsgPack.Tests
 			fixed (byte* ptr = input)
 			{
 				var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
-				byte type = deserializer.ReadByte();
-				uint length;
+				deserializer.ValidateArrayHeader();
 
-				if (type >= 0x90 && type < 0xA0)
-					length = (uint)(type % 16);
-				else if (type == 0xDC)
-					length = deserializer.ReadUInt16();
-				else if (type == 0xDD)
-					length = deserializer.ReadUInt32();
-				else
-					Assert.Fail();
-
-				// Deserialize
-				{
-					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
-					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
-					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
-					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
-					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
-					Assert.AreEqual(254u, CallMethod<Player>(deserializer)?.m_id);
-
-					Assert.AreEqual(56u, CallMethod<Player>(deserializer)?.m_id);
-				}
+				deserializer.Validate(new Player(254u));
+				deserializer.Validate(new Player(254u));
+				deserializer.Validate(new Player(254u));
+				deserializer.Validate(new Player(254u));
+				deserializer.Validate(new Player(254u));
+				deserializer.Validate(new Player(254u));
+				deserializer.Validate(new Player(56u));
 			}
 		}
 
@@ -152,27 +166,14 @@ namespace CitizenFX.MsgPack.Tests
 			fixed (byte* ptr = input)
 			{
 				var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
-				byte type = deserializer.ReadByte();
-				uint length;
+				deserializer.ValidateArrayHeader();
 
-				if (type >= 0x90 && type < 0xA0)
-					length = (uint)(type % 16);
-				else if (type == 0xDC)
-					length = deserializer.ReadUInt16();
-				else if (type == 0xDD)
-					length = deserializer.ReadUInt32();
-				else
-					Assert.Fail();
-
-				// Deserialize
-				{
-					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f), CallMethod<Vector3>(deserializer));
-					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f), CallMethod<Vector3>(deserializer));
-					Assert.AreEqual(new Vector3(1.0f, 2.0f, 3.0f), CallMethod<Vector3>(deserializer));
-					Assert.AreEqual(new Vector3(1.0f, 0.0f, 0.0f), CallMethod<Vector3>(deserializer));
-					Assert.AreEqual(new Vector3(0.0f, 1.0f, 0.0f), CallMethod<Vector3>(deserializer));
-					Assert.AreEqual(new Vector3(0.0f, 0.0f, 1.0f), CallMethod<Vector3>(deserializer));
-				}
+				deserializer.Validate(new Vector3(1.0f, 2.0f, 3.0f));
+				deserializer.Validate(new Vector3(1.0f, 2.0f, 3.0f));
+				deserializer.Validate(new Vector3(1.0f, 2.0f, 3.0f));
+				deserializer.Validate(new Vector3(1.0f, 0.0f, 0.0f));
+				deserializer.Validate(new Vector3(0.0f, 1.0f, 0.0f));
+				deserializer.Validate(new Vector3(0.0f, 0.0f, 1.0f));
 			}
 		}
 
@@ -195,30 +196,50 @@ namespace CitizenFX.MsgPack.Tests
 			fixed (byte* ptr = input)
 			{
 				var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
-				byte type = deserializer.ReadByte();
-				uint length;
+				deserializer.ValidateArrayHeader();
 
-				if (type >= 0x90 && type < 0xA0)
-					length = (uint)(type % 16);
-				else if (type == 0xDC)
-					length = deserializer.ReadUInt16();
-				else if (type == 0xDD)
-					length = deserializer.ReadUInt32();
-				else
-					Assert.Fail();
+				deserializer.Validate(new Quaternion(1.0f, 2.0f, 3.0f, 4.0f));
+				deserializer.Validate(new Quaternion(1.0f, 2.0f, 3.0f, 4.0f));
+				deserializer.Validate(new Quaternion(1.0f, 2.0f, 3.0f, 4.0f));
+				deserializer.Validate(new Quaternion(1.0f, 0.0f, 0.0f, 0.0f));
+				deserializer.Validate(new Quaternion(0.0f, 1.0f, 0.0f, 0.0f));
+				deserializer.Validate(new Quaternion(0.0f, 0.0f, 1.0f, 0.0f));
+				deserializer.Validate(new Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+				deserializer.Validate(new Quaternion(1.0f, 0.0f, 0.0f, 1.0f));
+				deserializer.ValidateException<Quaternion, InvalidCastException>();
+			}
+		}
 
-				// Deserialize
-				{
-					Assert.AreEqual(new Quaternion(1.0f, 2.0f, 3.0f, 4.0f), CallMethod<Quaternion>(deserializer));
-					Assert.AreEqual(new Quaternion(1.0f, 2.0f, 3.0f, 4.0f), CallMethod<Quaternion>(deserializer));
-					Assert.AreEqual(new Quaternion(1.0f, 2.0f, 3.0f, 4.0f), CallMethod<Quaternion>(deserializer));
-					Assert.AreEqual(new Quaternion(1.0f, 0.0f, 0.0f, 0.0f), CallMethod<Quaternion>(deserializer));
-					Assert.AreEqual(new Quaternion(0.0f, 1.0f, 0.0f, 0.0f), CallMethod<Quaternion>(deserializer));
-					Assert.AreEqual(new Quaternion(0.0f, 0.0f, 1.0f, 0.0f), CallMethod<Quaternion>(deserializer));
-					Assert.AreEqual(new Quaternion(0.0f, 0.0f, 0.0f, 1.0f), CallMethod<Quaternion>(deserializer));
-					Assert.AreEqual(new Quaternion(1.0f, 0.0f, 0.0f, 1.0f), CallMethod<Quaternion>(deserializer));
-					Assert.IsNotNull(ReturnException<Quaternion>(deserializer) is InvalidCastException);
-				}
+		[TestMethod]
+		public unsafe void DeserializeUIntArray()
+		{
+			byte[] input = new byte[] {
+				0x97, // fixarray, size 7 (this calling code must abide by this number, but we don't need to for these testing purposes)
+				0x94, 0xcc, 0xFE, 0xcc, 0xFD, 0xcc, 0xFC, 0xcc, 0x3,
+				0x91, 0xcd, 0x00, 0xFE,
+				0x91, 0xce, 0x00, 0x00, 0x00, 0xFE,
+				0x91, 0xcf, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFE,
+				0x92, 0xcc, 0xFE, 0xcc, 0x01,
+				0xcc, 0xFE,
+				0x92, 0xc0, 0xc0,
+				0xc0,
+				0x92, 0xcc, 0x3E, 0xcc, 0x68,
+			};
+
+			fixed (byte* ptr = input)
+			{
+				var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
+				deserializer.ValidateArrayHeader();
+
+				deserializer.Validate(new uint[] { 254, 253, 252, 3 });
+				deserializer.Validate(new uint[] { 254 });
+				deserializer.Validate(new uint[] { 254 });
+				deserializer.Validate(new uint[] { 254 });
+				deserializer.Validate(new uint[] { 254, 1 });
+				deserializer.ValidateException<uint[], InvalidCastException>();
+				deserializer.Validate(new uint[] { 0, 0 });
+				deserializer.Validate(null as uint[]);
+				deserializer.Validate(new List<uint> { 62, 104 });
 			}
 		}
 	}

@@ -111,15 +111,6 @@ namespace CitizenFX.MsgPack.Formatters
 						g.EmitCall(OpCodes.Call, methodSerialize, null);
 						g.Emit(OpCodes.Ret);
 					}
-
-					MethodBuilder methodDeserializeObject = typeBuilder.DefineMethod("DeserializeObject", MethodAttributes.Public | MethodAttributes.Static,
-						typeof(object), new[] { typeof(MsgPackDeserializer).MakeByRefType() });
-					{
-						var g = methodDeserializeObject.GetILGenerator();
-						g.Emit(OpCodes.Ldarg_0);
-						g.EmitCall(OpCodes.Call, methodDeserialize, null);
-						g.Emit(OpCodes.Ret);
-					}
 				}
 
 				buildType = typeBuilder.CreateType();

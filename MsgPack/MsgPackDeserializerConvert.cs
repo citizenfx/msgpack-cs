@@ -599,86 +599,24 @@ namespace CitizenFX.MsgPack
 
 		private unsafe object[] DeserializeAsObjectArray()
 		{
-			int length;
-			var type = ReadByte();
-
-			// should start with an array
-			if (type >= 0x90 && type < 0xA0)
-				length = type % 16;
-			else if (type == 0xDC)
-				length = ReadUInt16();
-			else if (type == 0xDD)
-				length = ReadInt32();
-			else
-				throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(object[])}");
+			uint length = ReadArraySize();
 
 			object[] array = new object[length];
 			for (var i = 0; i < length; ++i)
-			{
 				array[i] = DeserializeAsObject();
-			}
 
 			return array;
 		}
 
-		public unsafe string[] DeserializeAsStringArray()
+		public string[] DeserializeAsStringArray()
 		{
-			MsgPackCode type = (MsgPackCode)ReadByte();
-			if (type <= MsgPackCode.FixStrMax)
-			{
-				if (type <= MsgPackCode.FixIntPositiveMax)
-					return new string[] { ((byte)type).ToString() };
-				else if (type <= MsgPackCode.FixMapMax)
-				{
-					SkipMap((byte)type % 16u);
-					return new string[] { nameof(Dictionary<object, object>) };
-				}
-				else if (type <= MsgPackCode.FixArrayMax)
-					return ReadStringArray((byte)type % 16u);
-				else
-					return new string[] { ReadString((byte)type % 32u) };
-			}
-			else if (type >= MsgPackCode.FixIntNegativeMin)
-			{
-				return new string[] { unchecked((sbyte)type).ToString() }; // fix negative number
-			}
+			uint length = ReadArraySize();
 
-			switch (type)
-			{
-				case MsgPackCode.Nil: return new string[] { null };
-				case MsgPackCode.False: return new string[] { "false" };
-				case MsgPackCode.True: return new string[] { "true" };
-				case MsgPackCode.Float32: return new string[] { ReadSingle().ToString() };
-				case MsgPackCode.Float64: return new string[] { ReadDouble().ToString() };
-				case MsgPackCode.UInt8: return new string[] { ReadUInt8().ToString() };
-				case MsgPackCode.UInt16: return new string[] { ReadUInt16().ToString() };
-				case MsgPackCode.UInt32: return new string[] { ReadUInt32().ToString() };
-				case MsgPackCode.UInt64: return new string[] { ReadUInt64().ToString() };
-				case MsgPackCode.Int8: return new string[] { ReadInt8().ToString() };
-				case MsgPackCode.Int16: return new string[] { ReadInt16().ToString() };
-				case MsgPackCode.Int32: return new string[] { ReadInt32().ToString() };
-				case MsgPackCode.Int64: return new string[] { ReadInt64().ToString() };
+			string[] array = new string[length];
+			for (var i = 0; i < length; ++i)
+				array[i] = DeserializeAsString();
 
-				case MsgPackCode.FixExt1: return new string[] { ReadExtraTypeToString(1) };
-				case MsgPackCode.FixExt2: return new string[] { ReadExtraTypeToString(2) };
-				case MsgPackCode.FixExt4: return new string[] { ReadExtraTypeToString(4) };
-				case MsgPackCode.FixExt8: return new string[] { ReadExtraTypeToString(8) };
-				case MsgPackCode.FixExt16: return new string[] { ReadExtraTypeToString(16) };
-
-				case MsgPackCode.Str8: return new string[] { ReadString(ReadUInt8()) };
-				case MsgPackCode.Str16: return new string[] { ReadString(ReadUInt16()) };
-				case MsgPackCode.Str32: return new string[] { ReadString(ReadUInt32()) };
-
-				case MsgPackCode.Array16: return ReadStringArray(ReadUInt16());
-				case MsgPackCode.Array32: return ReadStringArray(ReadUInt32());
-
-				// TODO: process values as slots? Also take FixMapMax along
-				case MsgPackCode.Map16: SkipMap(ReadUInt16()); return new string[] { nameof(Dictionary<object, object>) };
-				case MsgPackCode.Map32: SkipMap(ReadUInt32()); return new string[] { nameof(Dictionary<object, object>) };
-			}
-
-			SkipObject((byte)type);
-			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(string)}");
+			return array;
 		}
 
 		#endregion

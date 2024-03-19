@@ -230,9 +230,8 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
-		internal uint ReadArraySize()
+		internal uint ReadArraySize(byte type)
 		{
-			var type = ReadByte();
 
 			// should start with an array
 			if (type >= 0x90 && type < 0xA0)
@@ -242,8 +241,10 @@ namespace CitizenFX.MsgPack
 			else if (type == 0xDD)
 				return ReadUInt32();
 
-			throw new InvalidOperationException("Unable to acquire the size of a non-array type");
+			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into a non-array type");
 		}
+
+		internal uint ReadArraySize() => ReadArraySize(ReadByte());
 
 		#endregion
 
@@ -380,6 +381,7 @@ namespace CitizenFX.MsgPack
 		#region Statics (easier access with current IL generation)
 
 		public static uint ReadArraySize(ref MsgPackDeserializer deserializer) => deserializer.ReadArraySize();
+		public static uint ReadArraySize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadArraySize(type);
 
 		public static byte ReadByte(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
 		public static float ReadSingle(ref MsgPackDeserializer deserializer) => deserializer.ReadSingle();

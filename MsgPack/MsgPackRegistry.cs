@@ -182,7 +182,7 @@ namespace CitizenFX.MsgPack
 				switch (type.GetArrayRank())
 				{
 					case 1:
-						return ArrayFormatter.Build(type.GetElementType());
+						return ArrayFormatter.Build(type.GetElementType(), type);
 				}
 			}
 			else if (type.IsGenericType)
@@ -191,6 +191,10 @@ namespace CitizenFX.MsgPack
 				switch (genericTypes.Length)
 				{
 					case 1:
+						{
+							if (ImplementsGenericTypeDefinition(type, typeof(List<>)))
+								return ArrayFormatter.Build(genericTypes[0], type);
+						}
 						break;
 					case 2:
 						{
