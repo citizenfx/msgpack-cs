@@ -78,7 +78,7 @@ namespace CitizenFX.MsgPack
 				}
 				else if (type < 0x90)
 				{
-					return ReadMap(type % 16u);
+					return ReadMapAsExpando(type % 16u);
 				}
 				else if (type < 0xA0)
 				{
@@ -133,8 +133,8 @@ namespace CitizenFX.MsgPack
 				case 0xDC: return ReadObjectArray(ReadUInt16());
 				case 0xDD: return ReadObjectArray(ReadUInt32());
 
-				case 0xDE: return ReadMap(ReadUInt16());
-				case 0xDF: return ReadMap(ReadUInt32());
+				case 0xDE: return ReadMapAsExpando(ReadUInt16());
+				case 0xDF: return ReadMapAsExpando(ReadUInt32());
 			}
 
 			throw new InvalidOperationException($"Tried to decode invalid MsgPack type {type}");
@@ -577,14 +577,14 @@ namespace CitizenFX.MsgPack
 			var type = ReadByte();
 
 			if (type >= 0x80 && type < 0x90)
-				return ReadDictionaryStringString(type % 16u);
+				return ReadMapAsDictStringString(type % 16u);
 
 			switch (type)
 			{
 				case 0xC0: return null;
 
-				case 0xDE: return ReadDictionaryStringString(ReadUInt16());
-				case 0xDF: return ReadDictionaryStringString(ReadUInt32());
+				case 0xDE: return ReadMapAsDictStringString(ReadUInt16());
+				case 0xDF: return ReadMapAsDictStringString(ReadUInt32());
 			}
 
 			throw new InvalidOperationException($"Tried to decode invalid MsgPack type {type}");

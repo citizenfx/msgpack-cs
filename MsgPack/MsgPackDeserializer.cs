@@ -147,32 +147,22 @@ namespace CitizenFX.MsgPack
 
 		#region Read complex type operations
 
-		internal IDictionary<string, object> ReadMap(uint length)
+		internal ExpandoObject ReadMapAsExpando(uint length)
 		{
-			var retobject = new ExpandoObject() as IDictionary<string, object>;
+			ExpandoObject expandoObject = new ExpandoObject();
 
-			for (var i = 0; i < length; i++)
-			{
-				var key = DeserializeAsString();
-				var value = DeserializeAsObject();
+			var dict = expandoObject as IDictionary<string, object>;
+			for (var i = 0; i < length; ++i)
+				dict[DeserializeAsString()] = DeserializeAsObject();
 
-				retobject.Add(key, value);
-			}
-
-			return retobject;
+			return expandoObject;
 		}
 
-		internal Dictionary<string, string> ReadDictionaryStringString(uint length)
+		internal Dictionary<string, string> ReadMapAsDictStringString(uint length)
 		{
 			var retobject = new Dictionary<string, string>();
-
-			for (var i = 0; i < length; i++)
-			{
-				var key = DeserializeAsString();
-				var value = DeserializeAsString();
-
-				retobject.Add(key, value);
-			}
+			for (var i = 0; i < length; ++i)
+				retobject[DeserializeAsString()] = DeserializeAsString();
 
 			return retobject;
 		}
@@ -392,40 +382,40 @@ namespace CitizenFX.MsgPack
 
 		#region Statics (easier access with current IL generation)
 
-		public static uint ReadArraySize(ref MsgPackDeserializer deserializer) => deserializer.ReadArraySize();
-		public static uint ReadArraySize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadArraySize(type);
-		public static uint ReadMapSize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadMapSize(type);
+		internal static uint ReadArraySize(ref MsgPackDeserializer deserializer) => deserializer.ReadArraySize();
+		internal static uint ReadArraySize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadArraySize(type);
+		internal static uint ReadMapSize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadMapSize(type);
 
-		public static byte ReadByte(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
-		public static float ReadSingle(ref MsgPackDeserializer deserializer) => deserializer.ReadSingle();
-		public static double ReadDouble(ref MsgPackDeserializer deserializer) => deserializer.ReadDouble();
-		public static byte ReadUInt8(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
-		public static ushort ReadUInt16(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt16();
-		public static uint ReadUInt32(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt32();
-		public static ulong ReadUInt64(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt64();
-		public static sbyte ReadInt8(ref MsgPackDeserializer deserializer) => deserializer.ReadInt8();
-		public static short ReadInt16(ref MsgPackDeserializer deserializer) => deserializer.ReadInt16();
-		public static int ReadInt32(ref MsgPackDeserializer deserializer) => deserializer.ReadInt32();
-		public static long ReadInt64(ref MsgPackDeserializer deserializer) => deserializer.ReadInt64();
+		internal static byte ReadByte(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
+		internal static float ReadSingle(ref MsgPackDeserializer deserializer) => deserializer.ReadSingle();
+		internal static double ReadDouble(ref MsgPackDeserializer deserializer) => deserializer.ReadDouble();
+		internal static byte ReadUInt8(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
+		internal static ushort ReadUInt16(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt16();
+		internal static uint ReadUInt32(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt32();
+		internal static ulong ReadUInt64(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt64();
+		internal static sbyte ReadInt8(ref MsgPackDeserializer deserializer) => deserializer.ReadInt8();
+		internal static short ReadInt16(ref MsgPackDeserializer deserializer) => deserializer.ReadInt16();
+		internal static int ReadInt32(ref MsgPackDeserializer deserializer) => deserializer.ReadInt32();
+		internal static long ReadInt64(ref MsgPackDeserializer deserializer) => deserializer.ReadInt64();
 
-		public static string ReadString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadString(length);
-		public static void SkipString(ref MsgPackDeserializer deserializer, uint length) => deserializer.SkipString(length);
-		public static CString ReadCString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadCString(length);
-		public static float ReadSingleLE(ref MsgPackDeserializer deserializer) => deserializer.ReadSingleLE();
+		internal static string ReadString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadString(length);
+		internal static void SkipString(ref MsgPackDeserializer deserializer, uint length) => deserializer.SkipString(length);
+		internal static CString ReadCString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadCString(length);
+		internal static float ReadSingleLE(ref MsgPackDeserializer deserializer) => deserializer.ReadSingleLE();
 
-		public static object[] ReadObjectArray(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadObjectArray(length);
+		internal static object[] ReadObjectArray(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadObjectArray(length);
 
-		public static void SkipObject(ref MsgPackDeserializer deserializer) => deserializer.SkipObject();
-		public static void SkipObjects(ref MsgPackDeserializer deserializer, uint size)
+		internal static void SkipObject(ref MsgPackDeserializer deserializer) => deserializer.SkipObject();
+		internal static void SkipObjects(ref MsgPackDeserializer deserializer, uint size)
 		{
 			for (uint i = 0; i < size; ++i)
 				deserializer.SkipObject();
 		}
 
-		public static void SkipVector2(ref MsgPackDeserializer deserializer) => deserializer.SkipVector2();
-		public static void SkipVector3(ref MsgPackDeserializer deserializer) => deserializer.SkipVector3();
-		public static void SkipVector4(ref MsgPackDeserializer deserializer) => deserializer.SkipVector4();
-		public static void SkipQuaternion(ref MsgPackDeserializer deserializer) => deserializer.SkipQuaternion();
+		internal static void SkipVector2(ref MsgPackDeserializer deserializer) => deserializer.SkipVector2();
+		internal static void SkipVector3(ref MsgPackDeserializer deserializer) => deserializer.SkipVector3();
+		internal static void SkipVector4(ref MsgPackDeserializer deserializer) => deserializer.SkipVector4();
+		internal static void SkipQuaternion(ref MsgPackDeserializer deserializer) => deserializer.SkipQuaternion();
 
 		internal static unsafe RestorePoint CreateRestorePoint(ref MsgPackDeserializer deserializer) => deserializer.CreateRestorePoint();
 		internal static unsafe void Restore(ref MsgPackDeserializer deserializer, RestorePoint restorePoint) => deserializer.Restore(restorePoint);
