@@ -248,12 +248,17 @@ namespace CitizenFX.MsgPack
 		/// <exception cref="ArgumentException">When <see cref="SourceAttribute"/> is used on a non supported type.</exception>
 		/// <exception cref="TargetParameterCountException">When any requested parameter isn't supported.</exception>
 		[SecurityCritical]
-		private static unsafe MsgPackFunc ConstructCommandDelegateWithSource(object target, MethodInfo method)
+		private static MsgPackFunc ConstructCommandDelegateWithSource(object target, MethodInfo method)
 		{
 			if (s_wrappedMethods.TryGetValue(method, out var existingMethod))
 			{
 				return (MsgPackFunc)existingMethod.CreateDelegate(typeof(MsgPackFunc), target);
 			}
+
+			// Explanation:
+			// We get the MsgPack data as follows: [ ushort source, string[] argumentsSplit, string argumentFullLine ]
+			// First we read `source` and store it as a local, then we pass argumentsSplit or skip it and then we pass argumentFullLine or ignore it.
+			// When there's a parameter annotated by `SourceAttribute` we read our locally stored source and pass (construct) it in place.
 
 			ParameterInfo[] parameters = method.GetParameters();
 			bool hasThis = (method.CallingConvention & CallingConventions.HasThis) != 0;
@@ -324,22 +329,28 @@ namespace CitizenFX.MsgPack
 
 					throw new ArgumentException($"{nameof(SourceAttribute)} used on type {t}, this type can't be constructed with parameter Remote.");
 				}
-				else if (t == typeof(string[])) // arguments; convert to string[]
+				else if (t == typeof(string[]) || t == typeof(object[])) // arguments; convert to string[]
 				{
 					if (p != 1)
-						throw new ArgumentException();
+						throw new ArgumentException($"Parameter of type {t} was found at position {p} while it should only be present at position 1");
 
 					++p;
 
 					g.Emit(ldarg_deserializer);
 					g.Emit(OpCodes.Call, GetResultMethod<string[]>(DeserializeAsStringArray));
 				}
-				else if (t == typeof(string)) // raw data; simply pass it on
+				else if (t == typeof(string) || t == typeof(object)) // raw data; simply pass it on
 				{
-					if (p != 2)
-						throw new ArgumentException();
+					if (p == 1)
+					{
+						// we skip the split command
+						g.Emit(ldarg_deserializer);
+						g.Emit(OpCodes.Call, GetVoidMethod(SkipObject));
+					}
+					else if (p != 2)
+						throw new ArgumentException($"Parameter of type {t} was found at position {p} while it should only be present at position 2");
 
-					++p;
+					p = 3;
 
 					g.Emit(ldarg_deserializer);
 					g.Emit(OpCodes.Call, GetResultMethod<string>(DeserializeAsString));

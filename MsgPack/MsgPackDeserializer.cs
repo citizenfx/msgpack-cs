@@ -325,15 +325,15 @@ namespace CitizenFX.MsgPack
 		internal Callback ReadCallback(uint length)
 		{
 			var refFunc = ReadString(length);
-#if true
+#if !MONO_V2 // we don't have mock ups of these on our MsgPack project
 			return null;
 #else
-					return m_netSource is null
-						? _LocalFunction.Create(refFunc)
+			return m_netSource is null
+				? _LocalFunction.Create(refFunc)
 #if REMOTE_FUNCTION_ENABLED
-						: _RemoteFunction.Create(refFunc, m_netSource);
+				: _RemoteFunction.Create(refFunc, m_netSource);
 #else
-						: null;
+				: null;
 #endif
 #endif
 		}

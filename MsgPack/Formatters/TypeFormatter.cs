@@ -218,7 +218,10 @@ namespace CitizenFX.MsgPack.Formatters
 		/// <summary>
 		/// Builds the IL code needed for the map serializing
 		/// </summary>
+		/// <param name="type">Current type we are building a serializer for</param>
+		/// <param name="g">Method IL generator</param>
 		/// <param name="members">Filtered by <see cref="KeyAttribute"/>, null values are ignored</param>
+		/// <param name="currentSerializer">The current method, to prevent direct recursive creation</param>
 		/// <inheritdoc cref="BuildSerializeArrayBody"/>
 		private static void BuildSerializeMapBody(Type type, ILGenerator g, DynamicArray<MemberInfo> members, MethodInfo currentSerializer)
 		{

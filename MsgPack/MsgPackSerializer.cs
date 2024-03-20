@@ -9,11 +9,11 @@ namespace CitizenFX.MsgPack
 	/// </summary>
 	public class MsgPackSerializer
 	{
-		/// NOTE:
-		///   1. When adding any Serialize(T) method, make sure there's an equivalent T DeserializeAsT() in the <see cref="MsgPackDeserializer"/> class.
-		///   2. Serialize(T) write headers, sizes, and pick the correct Write*([MsgPackCode,] T) method.
-		///   3. Write*([MsgPackCode,] T) write directly to memory, these should stay private.
-		///   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
+		// NOTE:
+		//   1. When adding any Serialize(T) method, make sure there's an equivalent T DeserializeAsT() in the MsgPackDeserializer class.
+		//   2. Serialize(T) write headers, sizes, and pick the correct Write*([MsgPackCode,] T) method.
+		//   3. Write*([MsgPackCode,] T) write directly to memory, these should stay private.
+		//   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
 
 		// TODO: look into and profile non-pinned alternatives for interop with C++
 		byte[] m_buffer;
@@ -245,7 +245,7 @@ namespace CitizenFX.MsgPack
 
 		#region Premade array serializers
 
-		public unsafe void Serialize(object[] v)
+		public void Serialize(object[] v)
 		{
 			WriteArrayHeader((uint)v.Length);
 
@@ -255,7 +255,7 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
-		public unsafe void Serialize(string[] v)
+		public void Serialize(string[] v)
 		{
 			WriteArrayHeader((uint)v.Length);
 
@@ -263,6 +263,19 @@ namespace CitizenFX.MsgPack
 			{
 				Serialize(v[i]);
 			}
+		}
+
+		#endregion
+
+
+
+		#region Extra types
+
+		public void Serialize(Callback v)
+		{
+			//WriteExtraTypeHeader(v.)
+
+			throw new InvalidCastException($"Can't serialize {nameof(Callback)}, unsupported at this moment");
 		}
 
 		#endregion
@@ -287,6 +300,26 @@ namespace CitizenFX.MsgPack
 				WriteBigEndian(MsgPackCode.Array16, (short)v);
 			else
 				WriteBigEndian(MsgPackCode.Array32, v);
+		}
+
+		internal void WriteExtraTypeHeader(uint length, byte extType)
+		{
+			switch (length)
+			{
+				case 0: throw new ArgumentException("Extra type can't be 0 sized");
+				case 1: Write((byte)MsgPackCode.FixExt1); break;
+				case 2: Write((byte)MsgPackCode.FixExt2); break;
+				case 4: Write((byte)MsgPackCode.FixExt4); break;
+				case 8: Write((byte)MsgPackCode.FixExt8); break;
+				case 16: Write((byte)MsgPackCode.FixExt16); break;
+			}
+
+			if (length <= 0xFFU)
+				Write(MsgPackCode.Ext8, (byte)length);
+			else if (length <= 0xFFFFU)
+				WriteBigEndian(MsgPackCode.Ext16, (ushort)length);
+			else
+				WriteBigEndian(MsgPackCode.Ext32,length);
 		}
 
 		private void Write(byte code)

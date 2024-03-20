@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CitizenFX.Core;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
@@ -11,11 +12,11 @@ namespace CitizenFX.MsgPack
 {
 	public partial struct MsgPackDeserializer
 	{
-		/// NOTE:
-		///   1. When adding any T DeserializeAsT() method, make sure there's an equivalent Serialize(T) in the <see cref="MsgPackSerializer"/> class.
-		///   2. DeserializeAsT() methods also read the type header, sizes, and pick the correct ReadU() method.
-		///   3. U ReadU() methods interpret the memory as if it's of type U and uses optionally given size/length data, no other checks are done, these should stay private.
-		///   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
+		// NOTE:
+		//   1. When adding any T DeserializeAsT() method, make sure there's an equivalent Serialize(T) in the MsgPackSerializer class.
+		//   2. DeserializeAsT() methods also read the type header, sizes, and pick the correct ReadU() method.
+		//   3. U ReadU() methods interpret the memory as if it's of type U and uses optionally given size/length data, no other checks are done, these should stay private.
+		//   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
 
 		#region Direct buffer deserialization
 
@@ -38,6 +39,7 @@ namespace CitizenFX.MsgPack
 
 		/// <param name="data">Pointer to MsgPacked byte data</param>
 		/// <param name="size">Size of MsgPacked byte data</param>
+		/// <param name="netSource">From whom came this?</param>
 		/// <inheritdoc cref="DeserializeAsObject(byte[], string)"/>
 		internal static unsafe object DeserializeAsObject(byte* data, long size, string netSource = null)
 		{
@@ -597,7 +599,7 @@ namespace CitizenFX.MsgPack
 
 		#region Premade array deserializers
 
-		private unsafe object[] DeserializeAsObjectArray()
+		public object[] DeserializeAsObjectArray()
 		{
 			uint length = ReadArraySize();
 
@@ -617,6 +619,36 @@ namespace CitizenFX.MsgPack
 				array[i] = DeserializeAsString();
 
 			return array;
+		}
+
+		#endregion
+
+		#region Extra types
+
+		public Callback DeserializeAsCallback()
+		{
+			byte type = ReadByte();
+			switch (type)
+			{
+				case 0xC7: SkipBytes(1); goto case 0xD8;
+				case 0xC8: SkipBytes(2); goto case 0xD8;
+				case 0xC9: SkipBytes(4); goto case 0xD8;
+
+				case 0xD4: // 1
+				case 0xD5: // 2
+				case 0xD6: // 4
+				case 0xD7: // 8
+				case 0xD8: // 16
+					{
+						var extType = ReadByte();
+						return extType == 10 || extType == 11
+							? ReadCallback(ReadUInt8())
+							: throw new InvalidCastException($"MsgPack extra type {extType} could not be deserialized into type {typeof(Callback)}");
+					}
+			}
+
+			SkipObject(type);
+			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(Callback)}");
 		}
 
 		#endregion

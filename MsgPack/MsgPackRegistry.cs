@@ -56,7 +56,7 @@ namespace CitizenFX.MsgPack
 
 		static MsgPackRegistry()
 		{
-			MethodInfo[] methods = typeof(MsgPackSerializer).GetMethods();
+			MethodInfo[] methods = typeof(MsgPackSerializer).GetMethods(BindingFlags.Instance | BindingFlags.Public);
 			for (uint i = 0; i < methods.Length; ++i)
 			{
 				var method = methods[i];
