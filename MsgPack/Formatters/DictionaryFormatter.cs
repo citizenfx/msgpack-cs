@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection.Emit;
 using System.Reflection;
 using static CitizenFX.MsgPack.Detail.Helper;
+using static CitizenFX.MsgPack.Detail.SerializerAccess;
 
 namespace CitizenFX.MsgPack.Formatters
 {
@@ -11,6 +12,8 @@ namespace CitizenFX.MsgPack.Formatters
 	{
 		public static Tuple<Serializer, MethodInfo> Build(Type typeKey, Type typeValue)
 		{
+			MethodInfo methodSerialize, methodDeserialize, methodObjectSerialize;
+
 			Type typeKeyValuePair = typeof(KeyValuePair<,>).MakeGenericType(typeKey, typeValue);
 			Type typeDictionary = typeof(Dictionary<,>).MakeGenericType(typeKey, typeValue);
 			Type typeIDictionary = typeof(IDictionary<,>).MakeGenericType(typeKey, typeValue);
@@ -22,40 +25,52 @@ namespace CitizenFX.MsgPack.Formatters
 			if (buildType == null)
 			{
 				TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
-				{
-					MethodInfo methodSerialize = BuildSerializer(typeKey, typeValue, typeKeyValuePair, typeIDictionary, typeBuilder);
-					BuildDeserializer(typeKey, typeValue, typeDictionary, typeBuilder);
 
-					// object (de)serialization
-					MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("SerializeObject", MethodAttributes.Public | MethodAttributes.Static,
-						typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
-					{
-						var g = methodSerializeObject.GetILGenerator();
-						g.Emit(OpCodes.Ldarg_0);
-						g.Emit(OpCodes.Ldarg_1);
-						g.Emit(OpCodes.Unbox_Any, typeIDictionary);
-						g.EmitCall(OpCodes.Call, methodSerialize, null);
-						g.Emit(OpCodes.Ret);
-					}
-				}
+				methodSerialize = BuildSerializer(typeKey, typeValue, typeKeyValuePair, typeIDictionary, typeBuilder);				
+				BuildDeserializer(typeKey, typeValue, typeDictionary, typeBuilder);
+				BuildObjectSerializer(typeIDictionary, methodSerialize, typeBuilder);
 
 				buildType = typeBuilder.CreateType();
 			}
 
-			Serializer serializeMethod = new Serializer(buildType.GetMethod("Serialize"),
-				(MsgPackObjectSerializer)buildType.GetMethod("SerializeObject").CreateDelegate(typeof(MsgPackObjectSerializer)));
+			methodSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), typeIDictionary });
+			methodDeserialize = buildType.GetMethod("Deserialize");
+			methodObjectSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), typeof(object) });
 
-			MethodInfo deserializeMethod = buildType.GetMethod("Deserialize");
+			Serializer serializeMethod = new Serializer(methodSerialize, methodObjectSerialize);
 
 			MsgPackRegistry.RegisterSerializer(typeDictionary, serializeMethod);
 			MsgPackRegistry.RegisterSerializer(typeIDictionary, serializeMethod);
 			MsgPackRegistry.RegisterSerializer(typeIReadOnlyDictionary, serializeMethod);
 
-			MsgPackRegistry.RegisterDeserializer(typeDictionary, deserializeMethod);
-			MsgPackRegistry.RegisterDeserializer(typeIDictionary, deserializeMethod);
-			MsgPackRegistry.RegisterDeserializer(typeIReadOnlyDictionary, deserializeMethod);
+			MsgPackRegistry.RegisterDeserializer(typeDictionary, methodDeserialize);
+			MsgPackRegistry.RegisterDeserializer(typeIDictionary, methodDeserialize);
+			MsgPackRegistry.RegisterDeserializer(typeIReadOnlyDictionary, methodDeserialize);
 
-			return new Tuple<Serializer, MethodInfo>(serializeMethod, deserializeMethod);
+			return new Tuple<Serializer, MethodInfo>(serializeMethod, methodDeserialize);
+		}
+
+		/// <summary>
+		/// Simply unpacks and calls <paramref name="methodSerialize"/>
+		/// </summary>
+		/// <param name="typeIDictionary">Type we're serializing</param>
+		/// <param name="methodSerialize">Method to call once the object is unpacked</param>
+		/// <param name="typeBuilder">Building type to add this method to</param>
+		/// <returns></returns>
+		private static MethodInfo BuildObjectSerializer(Type typeIDictionary, MethodInfo methodSerialize, TypeBuilder typeBuilder)
+		{
+			MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("Serialize",
+				MethodAttributes.Public | MethodAttributes.Static,
+				typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
+
+			var g = methodSerializeObject.GetILGenerator();
+			g.Emit(OpCodes.Ldarg_0);
+			g.Emit(OpCodes.Ldarg_1);
+			g.Emit(OpCodes.Unbox_Any, typeIDictionary);
+			g.EmitCall(OpCodes.Call, methodSerialize, null);
+			g.Emit(OpCodes.Ret);
+
+			return methodSerializeObject;
 		}
 
 		private static MethodInfo BuildSerializer(Type typeKey, Type typeValue, Type typeKeyValuePair, Type typeIDictionary, TypeBuilder typeBuilder)
@@ -82,10 +97,10 @@ namespace CitizenFX.MsgPack.Formatters
 
 			// get count
 			g.Emit(OpCodes.Ldarg_1);
-			g.EmitCall(OpCodes.Callvirt, typeIReadOnlyCollection.GetProperty("Count", Type.EmptyTypes).GetMethod, null);
+			g.EmitCall(OpCodes.Callvirt, typeIReadOnlyCollection.GetProperty("Count", Type.EmptyTypes).GetGetMethod(), null);
 
 			// write header
-			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteMapHeader", BindingFlags.Instance | BindingFlags.NonPublic), null);
+			g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(WriteMapHeader), null);
 
 			// get dictionary enumerator
 			g.Emit(OpCodes.Ldarg_1);
@@ -101,19 +116,19 @@ namespace CitizenFX.MsgPack.Formatters
 
 				// enumerator.Current
 				g.Emit(OpCodes.Ldloc_0);
-				g.EmitCall(OpCodes.Callvirt, typeIEnumerator.GetProperty("Current", Type.EmptyTypes).GetMethod, null);
+				g.EmitCall(OpCodes.Callvirt, typeIEnumerator.GetProperty("Current", Type.EmptyTypes).GetGetMethod(), null);
 				g.Emit(OpCodes.Stloc_1);
 
 				// serialize .Key
 				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Ldloca_S, (byte)1);
-				g.EmitCall(OpCodes.Call, typeKeyValuePair.GetProperty("Key", Type.EmptyTypes).GetMethod, null);
+				g.EmitCall(OpCodes.Call, typeKeyValuePair.GetProperty("Key", Type.EmptyTypes).GetGetMethod(), null);
 				g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateSerializer(typeKey), null);
 
 				// serialize .Value
 				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Ldloca_S, (byte)1);
-				g.EmitCall(OpCodes.Call, typeKeyValuePair.GetProperty("Value", Type.EmptyTypes).GetMethod, null);
+				g.EmitCall(OpCodes.Call, typeKeyValuePair.GetProperty("Value", Type.EmptyTypes).GetGetMethod(), null);
 				g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateSerializer(typeValue), null);
 
 				// enumerator.MoveNext() condition
@@ -127,7 +142,7 @@ namespace CitizenFX.MsgPack.Formatters
 			// write nil
 			g.MarkLabel(nilWrite);
 			g.Emit(OpCodes.Ldarg_0);
-			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteNil", Type.EmptyTypes), null);
+			g.EmitCall(OpCodes.Call, GetVoidMethod(WriteNil), null);
 			g.Emit(OpCodes.Ret);
 
 			return methodSerialize;
@@ -146,7 +161,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 			// get type
 			g.Emit(OpCodes.Ldarg_0);
-			g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
+			g.EmitCall(OpCodes.Call, GetResultMethod(ReadByte), null);
 			g.Emit(OpCodes.Stloc_0);
 
 			// if (array == null) return null
@@ -158,7 +173,7 @@ namespace CitizenFX.MsgPack.Formatters
 			// get size and create array with the read size
 			g.Emit(OpCodes.Ldarg_0);
 			g.Emit(OpCodes.Ldloc_0);
-			g.EmitCall(OpCodes.Call, GetResultMethod<byte, uint>(MsgPackDeserializer.ReadMapSize), null);
+			g.EmitCall(OpCodes.Call, GetResultMethod<byte, uint>(ReadMapSize), null);
 			g.Emit(OpCodes.Stloc_0); // use loc_0 as size now
 
 			// loc_2 = new Dictionary<K, V>();

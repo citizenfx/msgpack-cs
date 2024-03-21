@@ -1,13 +1,13 @@
 ﻿using CitizenFX.Core;
+using CitizenFX.MsgPack.Detail;
 using System;
 using System.Reflection.Emit;
 using System.Reflection;
-using ConstructorChoice = System.Collections.Generic.KeyValuePair<System.Reflection.ConstructorInfo, System.Reflection.Emit.OpCode>;
-using System.Linq;
 
+using ConstructorChoice = System.Collections.Generic.KeyValuePair<System.Reflection.ConstructorInfo, System.Reflection.Emit.OpCode>;
 using static CitizenFX.MsgPack.Detail.Helper;
-using CitizenFX.MsgPack.Detail;
-using System.Runtime.InteropServices;
+using static CitizenFX.MsgPack.Detail.SerializerAccess;
+using System.Linq;
 
 namespace CitizenFX.MsgPack.Formatters
 {
@@ -58,42 +58,71 @@ namespace CitizenFX.MsgPack.Formatters
 			Last = First + Count,
 		}
 
+		private static readonly ConstructorInfo m_invalidCastExceptionConstructor = typeof(InvalidCastException).GetConstructor(new[] { typeof(string) });
+
 		public static Tuple<Serializer, MethodInfo> Build(Type type)
 		{
-			string name = $"TypeFormatter<{type.FullName}>";
-			Type buildType = MsgPackRegistry.m_moduleBuilder.GetType(name);
+			MethodInfo methodSerialize = type.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), type });
+			MethodInfo methodDeserialize = type.GetMethod("Deserialize", new[] { typeof(MsgPackDeserializer).MakeByRefType() });
+			MethodInfo methodObjectSerialize = type.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), typeof(object) });
 
-			if (buildType == null)
+			if (methodSerialize == null || methodDeserialize == null)
 			{
-				TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
+				string name = $"TypeFormatter<{type.FullName}>";
+				Type buildType = MsgPackRegistry.m_moduleBuilder.GetType(name);
+
+				if (buildType == null)
 				{
-					MethodInfo methodSerialize = BuildSerializer(type, typeBuilder);
-					BuildDeserializer(type, typeBuilder);
-					
-					MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("SerializeObject", MethodAttributes.Public | MethodAttributes.Static,
-						typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
+					TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
+
+					if (methodSerialize == null)
+						methodSerialize = BuildSerializer(type, typeBuilder);
+
+					if (methodDeserialize == null)
 					{
-						var g = methodSerializeObject.GetILGenerator();
-						g.Emit(OpCodes.Ldarg_0);
-						g.Emit(OpCodes.Ldarg_1);
-						g.Emit(OpCodes.Unbox_Any, type);
-						g.EmitCall(OpCodes.Call, methodSerialize, null);
-						g.Emit(OpCodes.Ret);
+						BuildDeserializer(type, typeBuilder);
+						BuildObjectSerializer(type, methodSerialize, typeBuilder);
 					}
+
+					buildType = typeBuilder.CreateType();
 				}
 
-				buildType = typeBuilder.CreateType();
+				methodSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), type });
+				methodDeserialize = buildType.GetMethod("Deserialize");
+				methodObjectSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), typeof(object) });
 			}
 
-			Serializer serializeMethod = new Serializer(buildType.GetMethod("Serialize"),
-				(MsgPackObjectSerializer)buildType.GetMethod("SerializeObject").CreateDelegate(typeof(MsgPackObjectSerializer)));
-
-			MethodInfo deserializeMethod = buildType.GetMethod("Deserialize");
+			Serializer serializeMethod = methodObjectSerialize == null
+				? Serializer.CreateWithObjectWrapper(methodSerialize)
+				: new Serializer(methodSerialize, methodObjectSerialize);
 
 			MsgPackRegistry.RegisterSerializer(type, serializeMethod);
-			MsgPackRegistry.RegisterDeserializer(type, deserializeMethod);
+			MsgPackRegistry.RegisterDeserializer(type, methodDeserialize);
 
-			return new Tuple<Serializer, MethodInfo>(serializeMethod, deserializeMethod);
+			return new Tuple<Serializer, MethodInfo>(serializeMethod, methodDeserialize);
+		}
+
+		/// <summary>
+		/// Simply unpacks and calls <paramref name="methodSerialize"/>
+		/// </summary>
+		/// <param name="type">Type we're serializing</param>
+		/// <param name="methodSerialize">Method to call once the object is unpacked</param>
+		/// <param name="typeBuilder">Building type to add this method to</param>
+		/// <returns></returns>
+		private static MethodInfo BuildObjectSerializer(Type type, MethodInfo methodSerialize, TypeBuilder typeBuilder)
+		{
+			MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("Serialize",
+				MethodAttributes.Public | MethodAttributes.Static,
+				typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
+
+			var g = methodSerializeObject.GetILGenerator();
+			g.Emit(OpCodes.Ldarg_0);
+			g.Emit(OpCodes.Ldarg_1);
+			g.Emit(OpCodes.Unbox_Any, type);
+			g.EmitCall(OpCodes.Call, methodSerialize, null);
+			g.Emit(OpCodes.Ret);
+
+			return methodSerializeObject;
 		}
 
 		#region Serialize
@@ -111,7 +140,7 @@ namespace CitizenFX.MsgPack.Formatters
 					{
 						case Layout.Indexed:
 							{
-								var allMembers = GetMembersIndexed(type);
+								var allMembers = GetReadableIndexMembers(type);
 								var members = new MemberInfo[allMembers.Count];
 
 								for (uint i = 0; i < allMembers.Count; ++i)
@@ -131,14 +160,14 @@ namespace CitizenFX.MsgPack.Formatters
 							break;
 
 						case Layout.Keyed:
-							BuildSerializeMapBody(type, g, GetMembersMapped(type), methodSerialize);
+							BuildSerializeMapBody(type, g, GetReadAndWritableKeyedMembers(type), methodSerialize);
 							break;
 					}
 
 				}
 				else // no custom layout, fall back to serializing all public fields and properties (verbose)
 				{
-					BuildSerializeMapBody(type, g, GetMembersDefault(type), methodSerialize);
+					BuildSerializeMapBody(type, g, GetReadableMembers(type), methodSerialize);
 				}
 
 				g.Emit(OpCodes.Ret);
@@ -158,11 +187,13 @@ namespace CitizenFX.MsgPack.Formatters
 		/// <exception cref="ArgumentException"></exception>
 		private static void BuildSerializeArrayBody(Type type, ILGenerator g, MemberInfo[] members, MethodInfo currentSerializer)
 		{
-			var methodWriteNil = typeof(MsgPackSerializer).GetMethod("WriteNil");
+			if (members.Length == 0)
+				throw new ArgumentException($"Type {type} can't be serialized by arrays, no {nameof(IndexAttribute)} has been found on any field or property");
 
 			// write header
+			g.Emit(OpCodes.Ldarg_0);
 			g.Emit(OpCodes.Ldc_I4, members.Length);
-			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteArrayHeader", BindingFlags.Instance | BindingFlags.NonPublic), null);
+			g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(WriteArrayHeader), null);
 
 			for (uint i = 0; i < members.Length; ++i)
 			{
@@ -170,41 +201,36 @@ namespace CitizenFX.MsgPack.Formatters
 				{
 					case FieldInfo field:
 						{
-							var methodFieldSerializer = type == field.FieldType
+							var serializer = type == field.FieldType
 								? currentSerializer
 								: MsgPackRegistry.GetOrCreateSerializer(field.FieldType);
 
-							if (methodFieldSerializer == null)
+							if (serializer == null)
 								throw new NotSupportedException($"Requested serializer for {type.Name}.{field.Name} of type {field.FieldType} could not be found.");
 
 							// Value
 							g.Emit(OpCodes.Ldarg_0);
 							g.Emit(OpCodes.Ldarg_1);
 							g.Emit(OpCodes.Ldfld, field);
-							g.EmitCall(OpCodes.Call, methodFieldSerializer, null);
+							g.EmitCall(OpCodes.Call, serializer, null);
 						}
 						break;
 
 					case PropertyInfo property:
 						{
-							var methodFieldSerializer = type == property.PropertyType
+							var serializer = type == property.PropertyType
 								? currentSerializer
 								: MsgPackRegistry.GetOrCreateSerializer(property.PropertyType);
 
-							if (methodFieldSerializer == null)
+							if (serializer == null)
 								throw new NotSupportedException($"Requested serializer for {type.Name}.{property.Name} of type {property.PropertyType} could not be found.");
 
 							// Value
 							g.Emit(OpCodes.Ldarg_0);
 							g.Emit(OpCodes.Ldarg_1);
-							g.EmitCall(OpCodes.Call, property.GetMethod, null);
-							g.EmitCall(OpCodes.Call, methodFieldSerializer, null);
+							g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
+							g.EmitCall(OpCodes.Call, serializer, null);
 						}
-						break;
-
-					case null:
-						g.Emit(OpCodes.Ldarg_0);
-						g.EmitCall(OpCodes.Call, methodWriteNil, null);
 						break;
 
 					default:
@@ -228,12 +254,17 @@ namespace CitizenFX.MsgPack.Formatters
 			var methodStringSerializer = typeof(MsgPackSerializer).GetMethod("Serialize", new Type[] { typeof(string) });
 
 			// write header
+			g.Emit(OpCodes.Ldarg_0);
 			g.Emit(OpCodes.Ldc_I4, members.Count);
-			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteMapHeader", BindingFlags.Instance | BindingFlags.NonPublic), null);
+			g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(WriteMapHeader), null);
 
 			for (uint i = 0; i < members.Count; ++i)
 			{
-				switch (members[i])
+				var member = members[i];
+
+				string memberName = member.GetCustomAttribute<KeyAttribute>()?.Key ?? member.Name;
+
+				switch (member)
 				{
 					case FieldInfo field:
 						{
@@ -246,7 +277,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 							// Key
 							g.Emit(OpCodes.Ldarg_0);
-							g.Emit(OpCodes.Ldstr, field.Name);
+							g.Emit(OpCodes.Ldstr, memberName);
 							g.EmitCall(OpCodes.Call, methodStringSerializer, null);
 
 							// Value
@@ -268,13 +299,13 @@ namespace CitizenFX.MsgPack.Formatters
 
 							// Key
 							g.Emit(OpCodes.Ldarg_0);
-							g.Emit(OpCodes.Ldstr, property.Name);
+							g.Emit(OpCodes.Ldstr, memberName);
 							g.EmitCall(OpCodes.Call, methodStringSerializer, null);
 
 							// Value
 							g.Emit(OpCodes.Ldarg_0);
 							g.Emit(OpCodes.Ldarg_1);
-							g.EmitCall(OpCodes.Call, property.GetMethod, null);
+							g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
 							g.EmitCall(OpCodes.Call, methodFieldSerializer, null);
 						}
 						break;
@@ -322,7 +353,7 @@ namespace CitizenFX.MsgPack.Formatters
 			for (uint i = 0; i < labels.Length; ++i)
 				labels[i] = g.DefineLabel();
 
-			CallAndStore(g, GetResultMethod(MsgPackDeserializer.ReadByte), OpCodes.Stloc_0);
+			CallAndStore(g, GetResultMethod(ReadByte), OpCodes.Stloc_0);
 
 			// < 0x80 positive fixint
 			g.Emit(OpCodes.Ldloc_0);
@@ -368,8 +399,8 @@ namespace CitizenFX.MsgPack.Formatters
 				g.Emit(OpCodes.Throw);
 			}
 
-			var c = constructors[(uint)ConstructorOptions.Int].Key;
-			if (c != null)
+			ConstructorInfo c;
+			if ((c = constructors[(uint)ConstructorOptions.UInt].Key) != null)
 			{
 				// case < 0x80: positive fixint
 				g.MarkLabel(lblFixIntPositive);
@@ -377,7 +408,15 @@ namespace CitizenFX.MsgPack.Formatters
 				g.Emit(OpCodes.Conv_U4);
 				g.Emit(OpCodes.Newobj, c);
 				g.Emit(OpCodes.Ret);
+			}
+			else
+			{
+				g.MarkLabel(lblFixIntPositive);
+				g.EmitThrowInvalidCastException($"No constructor found for unsigned integers");
+			}
 
+			if ((c = constructors[(uint)ConstructorOptions.Int].Key) != null)
+			{
 				// case > 0xDF negative fixint
 				g.MarkLabel(lblFixIntNegative);
 				g.Emit(OpCodes.Ldloc_0);
@@ -388,9 +427,8 @@ namespace CitizenFX.MsgPack.Formatters
 			}
 			else
 			{
-				g.MarkLabel(lblFixIntPositive);
 				g.MarkLabel(lblFixIntNegative);
-				g.Emit(OpCodes.Br, lblDefault);
+				g.EmitThrowInvalidCastException($"No constructor found for signed integers");
 			}
 
 			// case 0xc0: null
@@ -406,24 +444,24 @@ namespace CitizenFX.MsgPack.Formatters
 				g.Emit(OpCodes.Ret);
 			}
 
-			SwitchCase(labels[(uint)JumpLabels.False], g, OpCodes.Ldc_I4_0, constructors[(uint)ConstructorOptions.Bool], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.True], g, OpCodes.Ldc_I4_1, constructors[(uint)ConstructorOptions.Bool], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.Float32], g, GetResultMethod(MsgPackDeserializer.ReadSingle), constructors[(uint)ConstructorOptions.Float32], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.Float64], g, GetResultMethod(MsgPackDeserializer.ReadDouble), constructors[(uint)ConstructorOptions.Float64], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.UInt8], g, GetResultMethod(MsgPackDeserializer.ReadUInt8), constructors[(uint)ConstructorOptions.UInt], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.UInt16], g, GetResultMethod(MsgPackDeserializer.ReadUInt16), constructors[(uint)ConstructorOptions.UInt], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.UInt32], g, GetResultMethod(MsgPackDeserializer.ReadUInt32), constructors[(uint)ConstructorOptions.UInt], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.UInt64], g, GetResultMethod(MsgPackDeserializer.ReadUInt64), constructors[(uint)ConstructorOptions.UInt], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.Int8], g, GetResultMethod(MsgPackDeserializer.ReadInt8), constructors[(uint)ConstructorOptions.Int], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.Int16], g, GetResultMethod(MsgPackDeserializer.ReadInt16), constructors[(uint)ConstructorOptions.Int], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.Int32], g, GetResultMethod(MsgPackDeserializer.ReadInt32), constructors[(uint)ConstructorOptions.Int], lblDefault);
-			SwitchCase(labels[(uint)JumpLabels.Int64], g, GetResultMethod(MsgPackDeserializer.ReadInt64), constructors[(uint)ConstructorOptions.Int], lblDefault);
+			SwitchCase(labels[(uint)JumpLabels.False], g, OpCodes.Ldc_I4_0, constructors[(uint)ConstructorOptions.Bool]);
+			SwitchCase(labels[(uint)JumpLabels.True], g, OpCodes.Ldc_I4_1, constructors[(uint)ConstructorOptions.Bool]);
+			SwitchCase(labels[(uint)JumpLabels.Float32], g, GetResultMethod(ReadSingle), constructors[(uint)ConstructorOptions.Float32]);
+			SwitchCase(labels[(uint)JumpLabels.Float64], g, GetResultMethod(ReadDouble), constructors[(uint)ConstructorOptions.Float64]);
+			SwitchCase(labels[(uint)JumpLabels.UInt8], g, GetResultMethod(ReadUInt8), constructors[(uint)ConstructorOptions.UInt]);
+			SwitchCase(labels[(uint)JumpLabels.UInt16], g, GetResultMethod(ReadUInt16), constructors[(uint)ConstructorOptions.UInt]);
+			SwitchCase(labels[(uint)JumpLabels.UInt32], g, GetResultMethod(ReadUInt32), constructors[(uint)ConstructorOptions.UInt]);
+			SwitchCase(labels[(uint)JumpLabels.UInt64], g, GetResultMethod(ReadUInt64), constructors[(uint)ConstructorOptions.UInt]);
+			SwitchCase(labels[(uint)JumpLabels.Int8], g, GetResultMethod(ReadInt8), constructors[(uint)ConstructorOptions.Int]);
+			SwitchCase(labels[(uint)JumpLabels.Int16], g, GetResultMethod(ReadInt16), constructors[(uint)ConstructorOptions.Int]);
+			SwitchCase(labels[(uint)JumpLabels.Int32], g, GetResultMethod(ReadInt32), constructors[(uint)ConstructorOptions.Int]);
+			SwitchCase(labels[(uint)JumpLabels.Int64], g, GetResultMethod(ReadInt64), constructors[(uint)ConstructorOptions.Int]);
 
 			BuildDeserializeExtraTypesBody(g, type, labels, lblDefault);
-			BuildDeserializeStringBody(g, type, labels, lblFixString, lblDefault);
+			BuildDeserializeStringBody(g, type, labels, lblFixString);
 			BuildDeserializeArrayBody(g, type, layout, labels, lblFixArray, lblDefault);
 			BuildDeserializeMapBody(g, type, layout, labels, lblFixMap, lblDefault);
-			
+
 			return methodDeserialize;
 		}
 
@@ -433,17 +471,17 @@ namespace CitizenFX.MsgPack.Formatters
 
 			// case 0xc7: Extra 8 bit
 			g.MarkLabel(labels[(uint)JumpLabels.Ext8]);
-			CallAndStore(g, GetResultMethod(MsgPackDeserializer.ReadUInt8), OpCodes.Stloc_1);
+			CallAndStore(g, GetResultMethod(ReadUInt8), OpCodes.Stloc_1);
 			g.Emit(OpCodes.Br, extraType);
 
 			// case 0xc8: Extra 16 bit
 			g.MarkLabel(labels[(uint)JumpLabels.Ext16]);
-			CallAndStore(g, GetResultMethod(MsgPackDeserializer.ReadUInt16), OpCodes.Stloc_1);
+			CallAndStore(g, GetResultMethod(ReadUInt16), OpCodes.Stloc_1);
 			g.Emit(OpCodes.Br, extraType);
 
 			// case 0xc9: Extra 32 bit
 			g.MarkLabel(labels[(uint)JumpLabels.Ext32]);
-			CallAndStore(g, GetResultMethod(MsgPackDeserializer.ReadUInt32), OpCodes.Stloc_1);
+			CallAndStore(g, GetResultMethod(ReadUInt32), OpCodes.Stloc_1);
 			g.Emit(OpCodes.Br, extraType);
 
 			// case 0xd4: fixed extension type
@@ -474,9 +512,9 @@ namespace CitizenFX.MsgPack.Formatters
 			SwitchCaseExtraType(g, type, defaultLabel);
 		}
 
-		private static void BuildDeserializeStringBody(ILGenerator g, Type type, Label[] labels, Label fixStrLabel, Label defaultLabel)
+		private static void BuildDeserializeStringBody(ILGenerator g, Type type, Label[] labels, Label fixStrLabel)
 		{
-			ConstructorInfo constructorString = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public	| BindingFlags.NonPublic,
+			ConstructorInfo constructorString = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
 				null, CallingConventions.HasThis, new Type[] { typeof(string) }, null);
 
 			if (constructorString != null)
@@ -495,24 +533,24 @@ namespace CitizenFX.MsgPack.Formatters
 				g.MarkLabel(labels[(uint)JumpLabels.Str8]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Dup);
-				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
+				g.EmitCall(OpCodes.Call, GetResultMethod(ReadByte), null);
 				g.Emit(OpCodes.Br, stringType);
 
 				// case 0xda: string with 16 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str16]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Dup);
-				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
+				g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt16), null);
 				g.Emit(OpCodes.Br, stringType);
 
 				// case 0xdb: string with 32 byte sized length
 				g.MarkLabel(labels[(uint)JumpLabels.Str32]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Dup);
-				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
+				g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt32), null);
 
 				g.MarkLabel(stringType);
-				g.EmitCall(OpCodes.Call, GetResultMethod<uint, string>(MsgPackDeserializer.ReadString), null);
+				g.EmitCall(OpCodes.Call, GetResultMethod<uint, string>(ReadString), null);
 				g.Emit(OpCodes.Newobj, constructorString);
 				g.Emit(OpCodes.Ret);
 			}
@@ -522,7 +560,7 @@ namespace CitizenFX.MsgPack.Formatters
 				g.MarkLabel(labels[(uint)JumpLabels.Str8]);
 				g.MarkLabel(labels[(uint)JumpLabels.Str16]);
 				g.MarkLabel(labels[(uint)JumpLabels.Str32]);
-				g.Emit(OpCodes.Br, defaultLabel);
+				g.EmitThrowInvalidCastException($"No constructor found for strings");
 			}
 		}
 
@@ -539,12 +577,12 @@ namespace CitizenFX.MsgPack.Formatters
 
 			g.MarkLabel(labels[(uint)JumpLabels.Array16]);
 			g.Emit(OpCodes.Ldarg_0);
-			g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
+			g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt16), null);
 			g.Emit(OpCodes.Br, arrayLabel);
 
 			g.MarkLabel(labels[(uint)JumpLabels.Array32]);
 			g.Emit(OpCodes.Ldarg_0);
-			g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
+			g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt32), null);
 
 			g.MarkLabel(arrayLabel);
 			g.Emit(OpCodes.Stloc_1);
@@ -554,14 +592,22 @@ namespace CitizenFX.MsgPack.Formatters
 			// Allow construction by arrays when the type is marked as indexed
 			if (layout == Layout.Indexed)
 			{
-				var members = GetMembersIndexed(type);
+				var members = GetReadableIndexMembers(type);
 				members.Sort((l, r) => (long)l.GetCustomAttribute<IndexAttribute>().Index - r.GetCustomAttribute<IndexAttribute>().Index);
 
+				bool requiresConstructor = false;
 				Type[] constructionTypes = new Type[members.Count];
 				for (int i = 0; i < members.Count; ++i)
 				{
 					var member = members[i];
-					constructionTypes[i] = (member as FieldInfo)?.FieldType ?? ((PropertyInfo)member).PropertyType;
+
+					if (member is PropertyInfo p)
+					{
+						constructionTypes[i] = p.PropertyType;
+						requiresConstructor |= !p.CanWrite;
+					}
+					else
+						constructionTypes[i] = ((FieldInfo)member).FieldType;
 				}
 
 				Label arrayNotBigEnough = g.DefineLabel();
@@ -573,7 +619,7 @@ namespace CitizenFX.MsgPack.Formatters
 				if (constructorArray != null)
 				{
 					g.Emit(OpCodes.Ldarg_0);
-					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.CreateRestorePoint), null);
+					g.EmitCall(OpCodes.Call, GetResultMethod(CreateRestorePoint), null);
 					g.Emit(OpCodes.Stloc_3);
 				}
 
@@ -597,7 +643,7 @@ namespace CitizenFX.MsgPack.Formatters
 						g.Emit(OpCodes.Ldloc_1);
 						g.Emit(OpCodes.Ldc_I4, valueIndex);
 						g.Emit(OpCodes.Sub);
-						g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(MsgPackDeserializer.SkipObjects), null);
+						g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(SkipObjects), null);
 
 						g.Emit(OpCodes.Newobj, constructor);
 						g.Emit(OpCodes.Stloc_2);
@@ -617,7 +663,7 @@ namespace CitizenFX.MsgPack.Formatters
 							if (member is FieldInfo field)
 								g.Emit(OpCodes.Stfld, field);
 							else
-								g.EmitCall(OpCodes.Call, (member as PropertyInfo).SetMethod, null);
+								g.EmitCall(OpCodes.Call, (member as PropertyInfo).GetSetMethod(), null);
 						}
 
 						// skip remaining objects in this array
@@ -625,9 +671,13 @@ namespace CitizenFX.MsgPack.Formatters
 						g.Emit(OpCodes.Ldloc_1);
 						g.Emit(OpCodes.Ldc_I4, valueIndex);
 						g.Emit(OpCodes.Sub);
-						g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(MsgPackDeserializer.SkipObjects), null);
+						g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(SkipObjects), null);
 
 						g.Emit(OpCodes.Stloc_2);
+					}
+					else if (requiresConstructor)
+					{
+						throw new ArgumentException($"Type {type} contains non-writable properties or fields, no constructor {type}({string.Join(",", constructionTypes.Select(x => x.ToString()))}), and no {type}(object[]) constructor to compensate.");
 					}
 				}
 				g.BeginCatchBlock(typeof(Exception));
@@ -638,7 +688,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 						g.Emit(OpCodes.Ldarg_0);
 						g.Emit(OpCodes.Ldloc_3);
-						g.EmitCall(OpCodes.Call, GetVoidMethod<MsgPackDeserializer.RestorePoint>(MsgPackDeserializer.Restore), null);
+						g.EmitCall(OpCodes.Call, GetVoidMethod<MsgPackDeserializer.RestorePoint>(Restore), null);
 
 						g.Emit(OpCodes.Leave, arrayNotBigEnough);
 					}
@@ -651,12 +701,12 @@ namespace CitizenFX.MsgPack.Formatters
 
 				g.MarkLabel(arrayNotBigEnough);
 			}
-						
+
 			if (constructorArray != null)
 			{
 				g.Emit(OpCodes.Ldarg_0);
 				g.Emit(OpCodes.Ldloc_1);
-				g.EmitCall(OpCodes.Call, GetResultMethod<uint, object[]>(MsgPackDeserializer.ReadObjectArray), null);
+				g.EmitCall(OpCodes.Call, GetResultMethod<uint, object[]>(ReadObjectArray), null);
 				g.Emit(OpCodes.Newobj, constructorArray);
 				g.Emit(OpCodes.Ret);
 			}
@@ -671,7 +721,7 @@ namespace CitizenFX.MsgPack.Formatters
 			ConstructorInfo constructor = type.GetConstructor(Type.EmptyTypes);
 			if (constructor != null || type.IsValueType)
 			{
-				var members = layout == Layout.Keyed ? GetMembersMapped(type) : GetMembersIndexed(type);
+				var members = GetWritableMembers(type);
 				members.Sort((l, r) => (l.Name.Length - r.Name.Length) * 1024 + l.Name.CompareTo(r.Name));
 
 				Label mapType = g.DefineLabel();
@@ -685,12 +735,12 @@ namespace CitizenFX.MsgPack.Formatters
 
 				g.MarkLabel(labels[(uint)JumpLabels.Map16]);
 				g.Emit(OpCodes.Ldarg_0);
-				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
+				g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt16), null);
 				g.Emit(OpCodes.Br, mapType);
 
 				g.MarkLabel(labels[(uint)JumpLabels.Map32]);
 				g.Emit(OpCodes.Ldarg_0);
-				g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
+				g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt32), null);
 
 				g.MarkLabel(mapType);
 				g.Emit(OpCodes.Stloc_0);
@@ -720,9 +770,9 @@ namespace CitizenFX.MsgPack.Formatters
 				// load string
 				{
 					var lblStringCases = new Label[] { g.DefineLabel(), g.DefineLabel(), g.DefineLabel() };
-					
+
 					g.Emit(OpCodes.Ldarg_0);
-					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
+					g.EmitCall(OpCodes.Call, GetResultMethod(ReadByte), null);
 
 					g.Emit(OpCodes.Ldc_I4, (uint)MsgPackCode.Str8);
 					g.Emit(OpCodes.Sub);
@@ -733,84 +783,94 @@ namespace CitizenFX.MsgPack.Formatters
 					// case 0xd9: string  with 8 byte sized length
 					g.MarkLabel(lblStringCases[0]);
 					g.Emit(OpCodes.Ldarg_0);
-					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
+					g.EmitCall(OpCodes.Call, GetResultMethod(ReadByte), null);
 					g.Emit(OpCodes.Br, stringType);
 
 					// case 0xda: string  with 16 byte sized length
 					g.MarkLabel(lblStringCases[1]);
 					g.Emit(OpCodes.Ldarg_0);
-					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt16), null);
+					g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt16), null);
 					g.Emit(OpCodes.Br, stringType);
 
 					// case 0xdb: string  with 32 byte sized length
 					g.MarkLabel(lblStringCases[2]);
 					g.Emit(OpCodes.Ldarg_0);
-					g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadUInt32), null);
+					g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt32), null);
 
 					g.MarkLabel(stringType);
 					g.Emit(OpCodes.Stloc_S, (byte)4);
-
-					g.Emit(OpCodes.Ldarg_0);
-					g.Emit(OpCodes.Ldloc_S, (byte)4);
-					g.EmitCall(OpCodes.Call, GetResultMethod<uint, CString>(MsgPackDeserializer.ReadCString), null);
 				}
 
-				int memberLeft = 0, memberEnd = 0;
-				int memberCurSize = members[memberEnd].Name.Length, memberNextSize = memberCurSize;
-
-				while (memberEnd < members.Count)
+				if (members.Count > 0)
 				{
-					// keep searching until we hit a name that's not of the same length
-					while (++memberEnd < members.Count && (memberNextSize = members[memberEnd].Name.Length) == memberCurSize) ;
-
-					Label lblSizeNotEqual = g.DefineLabel();
+					g.Emit(OpCodes.Ldarg_0);
 					g.Emit(OpCodes.Ldloc_S, (byte)4);
-					g.Emit(OpCodes.Ldc_I4, memberCurSize);
-					g.Emit(OpCodes.Bne_Un, lblSizeNotEqual);
+					g.EmitCall(OpCodes.Call, GetResultMethod<uint, CString>(ReadCString), null);
 
-					for (; memberLeft < memberEnd; ++memberLeft)
+					int memberLeft = 0, memberEnd = 0;
+					int memberCurSize = members[memberEnd].Name.Length, memberNextSize = memberCurSize;
+
+					do
 					{
-						var member = members[memberLeft];
+						// keep searching until we hit a name that's not of the same length
+						while (++memberEnd < members.Count && (memberNextSize = members[memberEnd].Name.Length) == memberCurSize) ;
 
-						var lblNotThisMember = g.DefineLabel();
+						Label lblSizeNotEqual = g.DefineLabel();
+						g.Emit(OpCodes.Ldloc_S, (byte)4);
+						g.Emit(OpCodes.Ldc_I4, memberCurSize);
+						g.Emit(OpCodes.Bne_Un, lblSizeNotEqual);
 
-						g.Emit(OpCodes.Dup); // duplicate CString
-						g.Emit(OpCodes.Ldstr, member.Name);
-						g.EmitCall(OpCodes.Call, ((Func<CString, string, bool>)CString.CompareASCIICaseInsensitive).Method, null);
-						g.Emit(OpCodes.Brfalse, lblNotThisMember);
-
-						if (member is FieldInfo field)
+						for (; memberLeft < memberEnd; ++memberLeft)
 						{
-							if (type.IsValueType)
-								g.Emit(OpCodes.Ldloca_S, (byte)2);
+							var member = members[memberLeft];
+
+							var lblNotThisMember = g.DefineLabel();
+
+							g.Emit(OpCodes.Dup); // duplicate CString
+							g.Emit(OpCodes.Ldstr, member.GetCustomAttribute<KeyAttribute>()?.Key ?? member.Name);
+							g.EmitCall(OpCodes.Call, ((Func<CString, string, bool>)CString.CompareASCIICaseInsensitive).Method, null);
+							g.Emit(OpCodes.Brfalse, lblNotThisMember);
+
+							if (member is FieldInfo field)
+							{
+								if (type.IsValueType)
+									g.Emit(OpCodes.Ldloca_S, (byte)2);
+								else
+									g.Emit(OpCodes.Ldloc_2);
+
+								g.Emit(OpCodes.Ldarg_0);
+								g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateDeserializer(field.FieldType), null);
+								g.Emit(OpCodes.Stfld, field);
+							}
 							else
-								g.Emit(OpCodes.Ldloc_2);
+							{
+								var property = member as PropertyInfo;
+								if (type.IsValueType)
+									g.Emit(OpCodes.Ldloca_S, (byte)2);
+								else
+									g.Emit(OpCodes.Ldloc_2);
 
-							g.Emit(OpCodes.Ldarg_0);
-							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateDeserializer(field.FieldType), null);
-							g.Emit(OpCodes.Stfld, field);
-						}
-						else
-						{
-							var property = member as PropertyInfo;
-							if (type.IsValueType)
-								g.Emit(OpCodes.Ldloca_S, (byte)2);
-							else
-								g.Emit(OpCodes.Ldloc_2);
+								g.Emit(OpCodes.Ldarg_0);
+								g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateDeserializer(property.PropertyType), null);
+								g.EmitCall(OpCodes.Call, property.GetSetMethod(), null);
+							}
 
-							g.Emit(OpCodes.Ldarg_0);
-							g.EmitCall(OpCodes.Call, MsgPackRegistry.GetOrCreateDeserializer(property.PropertyType), null);
-							g.EmitCall(OpCodes.Call, property.SetMethod, null);
+							g.MarkLabel(lblNotThisMember);
 						}
 
-						g.MarkLabel(lblNotThisMember);
+						g.MarkLabel(lblSizeNotEqual);
+
+						memberCurSize = memberNextSize;
 					}
-
-					g.MarkLabel(lblSizeNotEqual);
-
+					while (memberEnd < members.Count);
+					
 					g.Emit(OpCodes.Pop); // remove CString
-
-					memberCurSize = memberNextSize;
+				}
+				else
+				{
+					g.Emit(OpCodes.Ldarg_0);
+					g.Emit(OpCodes.Ldloc_S, (byte)4);
+					g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(SkipString), null);
 				}
 
 				// ++i
@@ -850,6 +910,25 @@ namespace CitizenFX.MsgPack.Formatters
 		{
 			var result = new ConstructorChoice[(uint)ConstructorOptions.Count];
 
+			void Set(ConstructorOptions typeIndex, ConstructorInfo constructor, OpCode code)
+			{
+				result[(uint)typeIndex] = new ConstructorChoice(constructor, code);
+			}
+
+			void SetIfBigger(ConstructorOptions typeIndex, ConstructorInfo constructor, OpCode code)
+			{
+				ref var c = ref result[(uint)typeIndex];
+				if (code.Value > c.Value.Value)
+					c = new ConstructorChoice(constructor, code);
+			}
+
+			void SetIfMissing(ConstructorOptions typeIndex, ConstructorOptions replaceWith)
+			{
+				ref var c = ref result[(uint)typeIndex];
+				if (c.Key == null)
+					c = result[(uint)replaceWith];
+			}
+
 			ConstructorInfo[] constructors = type.GetConstructors();
 			for (uint i = 0; i < constructors.Length; ++i)
 			{
@@ -859,80 +938,41 @@ namespace CitizenFX.MsgPack.Formatters
 				{
 					Type parameterType = parameters[0].ParameterType;
 					if (parameterType == typeof(bool))
-					{
-						result[(uint)ConstructorOptions.Bool] = new ConstructorChoice(curConstructor, OpCodes.Pop);
-					}
+						Set(ConstructorOptions.Bool, curConstructor, OpCodes.Pop);
 					else if (parameterType == typeof(byte))
-					{
-						ref var c = ref result[(uint)ConstructorOptions.UInt];
-						if (OpCodes.Conv_U1.Value > c.Value.Value)
-							c = new ConstructorChoice(curConstructor, OpCodes.Conv_U1);
-					}
+						SetIfBigger(ConstructorOptions.UInt, curConstructor, OpCodes.Conv_U1);
 					else if (parameterType == typeof(ushort))
-					{
-						ref var c = ref result[(uint)ConstructorOptions.UInt];
-						if (OpCodes.Conv_U2.Value > c.Value.Value)
-							c = new ConstructorChoice(curConstructor, OpCodes.Conv_U2);
-					}
+						SetIfBigger(ConstructorOptions.UInt, curConstructor, OpCodes.Conv_U2);
 					else if (parameterType == typeof(uint))
-					{
-						ref var c = ref result[(uint)ConstructorOptions.UInt];
-						if (OpCodes.Conv_U4.Value > c.Value.Value)
-							c = new ConstructorChoice(curConstructor, OpCodes.Conv_U4);
-					}
+						SetIfBigger(ConstructorOptions.UInt, curConstructor, OpCodes.Conv_U4);
 					else if (parameterType == typeof(ulong))
-					{
-						ref var c = ref result[(uint)ConstructorOptions.UInt];
-						if (OpCodes.Conv_U8.Value > c.Value.Value)
-							c = new ConstructorChoice(curConstructor, OpCodes.Conv_U8);
-					}
+						SetIfBigger(ConstructorOptions.UInt, curConstructor, OpCodes.Conv_U8);
 					else if (parameterType == typeof(sbyte))
-					{
-						ref var c = ref result[(uint)ConstructorOptions.Int];
-						if (OpCodes.Conv_I1.Value > c.Value.Value)
-							c = new ConstructorChoice(curConstructor, OpCodes.Conv_I1);
-					}
+						SetIfBigger(ConstructorOptions.Int, curConstructor, OpCodes.Conv_I1);
 					else if (parameterType == typeof(short))
-					{
-						ref var c = ref result[(uint)ConstructorOptions.Int];
-						if (OpCodes.Conv_I2.Value > c.Value.Value)
-							c = new ConstructorChoice(curConstructor, OpCodes.Conv_I2);
-					}
+						SetIfBigger(ConstructorOptions.Int, curConstructor, OpCodes.Conv_I2);
 					else if (parameterType == typeof(int))
-					{
-						ref var c = ref result[(uint)ConstructorOptions.Int];
-						if (OpCodes.Conv_I4.Value > c.Value.Value)
-							c = new ConstructorChoice(curConstructor, OpCodes.Conv_I4);
-					}
+						SetIfBigger(ConstructorOptions.Int, curConstructor, OpCodes.Conv_I4);
 					else if (parameterType == typeof(long))
-					{
-						ref var c = ref result[(uint)ConstructorOptions.Int];
-						if (OpCodes.Conv_I8.Value > c.Value.Value)
-							c = new ConstructorChoice(curConstructor, OpCodes.Conv_I8);
-					}
+						SetIfBigger(ConstructorOptions.Int, curConstructor, OpCodes.Conv_I8);
 					else if (parameterType == typeof(float))
-					{
-						result[(uint)ConstructorOptions.Float32] = new ConstructorChoice(curConstructor, OpCodes.Conv_R4);
-					}
+						Set(ConstructorOptions.Float32, curConstructor, OpCodes.Conv_R4);
 					else if (parameterType == typeof(double))
-					{
-						result[(uint)ConstructorOptions.Float64] = new ConstructorChoice(curConstructor, OpCodes.Conv_R8);
-					}
+						Set(ConstructorOptions.Float64, curConstructor, OpCodes.Conv_R8);
 				}
 			}
 
 			{
-				ref var c = ref result[(uint)ConstructorOptions.Float32];
-				if (c.Key == null) c = result[(uint)ConstructorOptions.Float64];
-
-				c = ref result[(uint)ConstructorOptions.Float64];
-				if (c.Key == null) c = result[(uint)ConstructorOptions.Float32];
+				SetIfMissing(ConstructorOptions.Float32, ConstructorOptions.Float64);
+				SetIfMissing(ConstructorOptions.Float64, ConstructorOptions.Float32);
+				SetIfMissing(ConstructorOptions.Int, ConstructorOptions.UInt);
+				SetIfMissing(ConstructorOptions.UInt, ConstructorOptions.Int);
 			}
 
 			return result;
 		}
 
-		private static void SwitchCase(Label label, ILGenerator g, OpCode op0, ConstructorChoice constructor, Label defaultLabel)
+		private static void SwitchCase(Label label, ILGenerator g, OpCode op0, ConstructorChoice constructor)
 		{
 			g.MarkLabel(label);
 
@@ -943,11 +983,11 @@ namespace CitizenFX.MsgPack.Formatters
 				g.Emit(OpCodes.Ret);
 			}
 			else
-				g.Emit(OpCodes.Br, defaultLabel);
+				g.EmitThrowInvalidCastException($"No constructor found for {label}");
 
 		}
 
-		private static void SwitchCase(Label label, ILGenerator g, MethodInfo readMethod, ConstructorChoice constructor, Label defaultLabel)
+		private static void SwitchCase(Label label, ILGenerator g, MethodInfo readMethod, ConstructorChoice constructor)
 		{
 			g.MarkLabel(label);
 
@@ -960,7 +1000,7 @@ namespace CitizenFX.MsgPack.Formatters
 				g.Emit(OpCodes.Ret);
 			}
 			else
-				g.Emit(OpCodes.Br, defaultLabel);
+				g.EmitThrowInvalidCastException($"No constructor found for {label}");
 		}
 
 		private static void SwitchCaseExtraType(ILGenerator g, Type type, Label defaultLabel)
@@ -972,15 +1012,15 @@ namespace CitizenFX.MsgPack.Formatters
 			for (uint i = 0; i < labels.Length; ++i)
 				labels[i] = g.DefineLabel();
 
-			var methodReadString = GetResultMethod<uint, string>(MsgPackDeserializer.ReadString);
-			var methodSkipString = GetVoidMethod<uint>(MsgPackDeserializer.SkipString);
-			var methodReadSingle = GetResultMethod(MsgPackDeserializer.ReadSingleLE);
+			var methodReadString = GetResultMethod<uint, string>(ReadString);
+			var methodSkipString = GetVoidMethod<uint>(SkipString);
+			var methodReadSingle = GetResultMethod(ReadSingleLE);
 			ConstructorInfo constructor = null;
 			ConstructorInfo constructorCallback = typeof(Callback).GetConstructor(new Type[] { typeof(string) });
 
 			// type code
 			g.Emit(OpCodes.Ldarg_0);
-			g.Emit(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte));
+			g.Emit(OpCodes.Call, GetResultMethod(ReadByte));
 			g.Emit(OpCodes.Stloc_0);
 
 			// case 10: RemoteFunc
@@ -1057,7 +1097,7 @@ namespace CitizenFX.MsgPack.Formatters
 			else
 			{
 				g.Emit(OpCodes.Ldarg_0);
-				g.EmitCall(OpCodes.Call, GetVoidMethod(MsgPackDeserializer.SkipVector2), null);
+				g.EmitCall(OpCodes.Call, GetVoidMethod(SkipVector2), null);
 				g.Emit(OpCodes.Br, defaultLabel);
 			}
 
@@ -1077,14 +1117,15 @@ namespace CitizenFX.MsgPack.Formatters
 			}
 			else if ((constructor = type.GetConstructor(new Type[] { typeof(Vector3) })) != null)
 			{
-				g.Emit(OpCodes.Newobj, typeof(MsgPackDeserializer).GetMethod("ReadVector3", Type.EmptyTypes));
+				g.Emit(OpCodes.Ldarg_0);
+				g.EmitCall(OpCodes.Call, GetResultMethod<Vector3>(ReadVector3), null);
 				g.Emit(OpCodes.Newobj, constructor);
 				g.Emit(OpCodes.Ret);
 			}
 			else
 			{
 				g.Emit(OpCodes.Ldarg_0);
-				g.EmitCall(OpCodes.Call, GetVoidMethod(MsgPackDeserializer.SkipVector3), null);
+				g.EmitCall(OpCodes.Call, GetVoidMethod(SkipVector3), null);
 				g.Emit(OpCodes.Br, defaultLabel);
 			}
 
@@ -1121,7 +1162,7 @@ namespace CitizenFX.MsgPack.Formatters
 			else
 			{
 				g.Emit(OpCodes.Ldarg_0);
-				g.EmitCall(OpCodes.Call, GetVoidMethod(MsgPackDeserializer.SkipVector4), null);
+				g.EmitCall(OpCodes.Call, GetVoidMethod(SkipVector4), null);
 				g.Emit(OpCodes.Br, defaultLabel);
 			}
 
@@ -1158,38 +1199,49 @@ namespace CitizenFX.MsgPack.Formatters
 			else
 			{
 				g.Emit(OpCodes.Ldarg_0);
-				g.EmitCall(OpCodes.Call, GetVoidMethod(MsgPackDeserializer.SkipQuaternion), null);
+				g.EmitCall(OpCodes.Call, GetVoidMethod(SkipQuaternion), null);
 				g.Emit(OpCodes.Br, defaultLabel);
 			}
 		}
 
-		#endregion
+#endregion
 
-		#region General / Helper
-		private static DynamicArray<MemberInfo> GetMembersDefault(Type type)
+#region General / Helper
+
+		private static DynamicArray<MemberInfo> GetReadableMembers(Type type)
 		{
 			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
-			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite && p.GetMethod?.GetParameters().Length == 0))
-					&& m.GetCustomAttribute<IgnoreAttribute>() == null));
-
-			return members;
-		}
-
-		private static DynamicArray<MemberInfo> GetMembersMapped(Type type)
-		{
-			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
-			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite && p.GetMethod?.GetParameters().Length == 0))
-					&& m.GetCustomAttribute<IgnoreAttribute>() == null
-					&& m.GetCustomAttribute<KeyAttribute>() != null));
-
-			return members;
-		}
-
-		private static DynamicArray<MemberInfo> GetMembersIndexed(Type type)
-		{
-			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
-			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite && p.GetMethod?.GetParameters().Length == 0))
+			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.GetGetMethod()?.GetParameters().Length == 0))
 				&& m.GetCustomAttribute<IgnoreAttribute>() == null));
+
+			return members;
+		}
+
+		private static DynamicArray<MemberInfo> GetWritableMembers(Type type)
+		{
+			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
+			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite))
+				&& m.GetCustomAttribute<IgnoreAttribute>() == null));
+
+			return members;
+		}
+
+		private static DynamicArray<MemberInfo> GetReadAndWritableKeyedMembers(Type type)
+		{
+			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
+			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite && p.GetGetMethod()?.GetParameters().Length == 0))
+				&& m.GetCustomAttribute<IgnoreAttribute>() == null
+				&& m.GetCustomAttribute<KeyAttribute>() != null));
+
+			return members;
+		}
+
+		private static DynamicArray<MemberInfo> GetReadableIndexMembers(Type type)
+		{
+			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
+			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.GetGetMethod()?.GetParameters().Length == 0))
+				&& m.GetCustomAttribute<IgnoreAttribute>() == null
+				&& m.GetCustomAttribute<IndexAttribute>() != null));
 
 			return members;
 		}
@@ -1207,6 +1259,23 @@ namespace CitizenFX.MsgPack.Formatters
 			g.Emit(storeLoc);
 		}
 
-		#endregion
+		private static void EmitDebugWriteLine(this ILGenerator g, string value)
+		{
+			g.Emit(OpCodes.Ldstr, value);
+#if MONO_V2
+			g.Emit(OpCodes.Call, ((Action<string>)Debug.WriteLine).Method);
+#else
+			g.Emit(OpCodes.Call, ((Action<string>)Console.WriteLine).Method);
+#endif
+		}
+
+		private static void EmitThrowInvalidCastException(this ILGenerator g, string value)
+		{
+			g.Emit(OpCodes.Ldstr, value);
+			g.Emit(OpCodes.Newobj, m_invalidCastExceptionConstructor);
+			g.Emit(OpCodes.Throw);
+		}
+
+#endregion
 	}
 }

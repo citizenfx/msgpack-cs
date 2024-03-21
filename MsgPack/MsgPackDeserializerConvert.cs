@@ -205,6 +205,12 @@ namespace CitizenFX.MsgPack
 
 		internal void SkipObject() => SkipObject(ReadByte());
 
+		internal void SkipObjects(uint size)
+		{
+			for (uint i = 0; i < size; ++i)
+				SkipObject();
+		}
+
 		public unsafe bool DeserializeAsBool()
 		{
 			byte type = ReadByte();
@@ -244,9 +250,9 @@ namespace CitizenFX.MsgPack
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(bool)}");
 		}
 
-		public unsafe uint DeserializeAsUInt32()
+		public uint DeserializeAsUInt32()
 		{
-			byte type = *AdvancePointer(1);
+			byte type = ReadByte();
 			if (type < 0x80) // positive fixint
 				return (uint)type;
 			else if (type > 0xA0) // fixstr
@@ -288,9 +294,9 @@ namespace CitizenFX.MsgPack
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(uint)}");
 		}
 
-		public unsafe ulong DeserializeAsUInt64()
+		public ulong DeserializeAsUInt64()
 		{
-			byte type = *AdvancePointer(1);
+			byte type = ReadByte();
 			if (type < 0x80) // positive fixint
 				return (ulong)type;
 			else if (type > 0xA0) // fixstr
@@ -332,9 +338,9 @@ namespace CitizenFX.MsgPack
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(ulong)}");
 		}
 
-		public unsafe int DeserializeAsInt32()
+		public int DeserializeAsInt32()
 		{
-			byte type = *AdvancePointer(1);
+			byte type = ReadByte();
 			if (type < 0x80) // positive fixint
 				return (int)type;
 			else if (type > 0xA0) // fixstr
@@ -376,9 +382,9 @@ namespace CitizenFX.MsgPack
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(int)}");
 		}
 
-		public unsafe long DeserializeAsInt64()
+		public long DeserializeAsInt64()
 		{
-			byte type = *AdvancePointer(1);
+			byte type = ReadByte();
 			if (type < 0x80) // positive fixint
 				return (long)type;
 			else if (type > 0xA0) // fixstr
@@ -420,9 +426,9 @@ namespace CitizenFX.MsgPack
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(long)}");
 		}
 
-		public unsafe float DeserializeAsFloat32()
+		public float DeserializeAsFloat32()
 		{
-			byte type = *AdvancePointer(1);
+			byte type = ReadByte();
 			if (type < 0x80) // positive fixint
 				return (float)type;
 			else if (type > 0xA0) // fixstr
@@ -464,9 +470,9 @@ namespace CitizenFX.MsgPack
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(float)}");
 		}
 
-		public unsafe double DeserializeAsFloat64()
+		public double DeserializeAsFloat64()
 		{
-			byte type = *AdvancePointer(1);
+			byte type = ReadByte();
 			if (type < 0x80) // positive fixint
 				return (double)type;
 			else if (type > 0xA0) // fixstr
@@ -508,7 +514,7 @@ namespace CitizenFX.MsgPack
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(double)}");
 		}
 
-		public unsafe string DeserializeAsString()
+		public string DeserializeAsString()
 		{
 			MsgPackCode type = (MsgPackCode)ReadByte();
 			if (type <= MsgPackCode.FixStrMax)

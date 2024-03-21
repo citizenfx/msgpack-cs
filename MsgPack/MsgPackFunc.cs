@@ -86,7 +86,7 @@ namespace CitizenFX.MsgPack
 
 			// get size, will throw an exception if the input isn't an array
 			g.Emit(ldarg_deserializer);
-			g.EmitCall(OpCodes.Call, GetResultMethod<uint>(MsgPackDeserializer.ReadArraySize), null);
+			g.EmitCall(OpCodes.Call, GetResultMethod<uint>(Detail.SerializerAccess.ReadArraySize), null);
 			g.Emit(OpCodes.Stloc_0);
 
 			for (int i = 0, p = 0; i < parameters.Length; ++i)
@@ -345,7 +345,7 @@ namespace CitizenFX.MsgPack
 					{
 						// we skip the split command
 						g.Emit(ldarg_deserializer);
-						g.Emit(OpCodes.Call, GetVoidMethod(SkipObject));
+						g.Emit(OpCodes.Call, GetVoidMethod(Detail.SerializerAccess.SkipObject));
 					}
 					else if (p != 2)
 						throw new ArgumentException($"Parameter of type {t} was found at position {p} while it should only be present at position 2");

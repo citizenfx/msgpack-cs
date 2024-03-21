@@ -2,6 +2,8 @@
 using System.Reflection.Emit;
 using System.Reflection;
 using static CitizenFX.MsgPack.Detail.Helper;
+using static CitizenFX.MsgPack.Detail.SerializerAccess;
+using System.Runtime.InteropServices;
 
 namespace CitizenFX.MsgPack.Formatters
 {
@@ -9,40 +11,55 @@ namespace CitizenFX.MsgPack.Formatters
 	{
 		public static Tuple<Serializer, MethodInfo> Build(Type type, Type typeArray)
 		{
+			MethodInfo methodSerialize, methodDeserialize, methodObjectSerialize;
+
 			string name = $"ArrayFormatter<{typeArray.FullName}>";
 			Type buildType = MsgPackRegistry.m_moduleBuilder.GetType(name);
 
 			if (buildType == null)
 			{
 				TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
-				{
-					MethodInfo methodSerialize = BuildSerializer(type, typeArray, typeBuilder);
-					BuildDeserializer(type, typeArray, typeBuilder);
 
-					MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("SerializeObject", MethodAttributes.Public | MethodAttributes.Static,
-						typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
-					{
-						var g = methodSerializeObject.GetILGenerator();
-						g.Emit(OpCodes.Ldarg_0);
-						g.Emit(OpCodes.Ldarg_1);
-						g.Emit(OpCodes.Unbox_Any, typeArray);
-						g.EmitCall(OpCodes.Call, methodSerialize, null);
-						g.Emit(OpCodes.Ret);
-					}
-				}
+				methodSerialize = BuildSerializer(type, typeArray, typeBuilder);
+				BuildDeserializer(type, typeArray, typeBuilder);
+				BuildObjectSerializer(typeArray, methodSerialize, typeBuilder);
 
 				buildType = typeBuilder.CreateType();
 			}
+			
+			methodSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), type });
+			methodDeserialize = buildType.GetMethod("Deserialize");
+			methodObjectSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), typeof(object) });
 
-			Serializer serializeMethod = new Serializer(buildType.GetMethod("Serialize"),
-				(MsgPackObjectSerializer)buildType.GetMethod("SerializeObject").CreateDelegate(typeof(MsgPackObjectSerializer)));
+			Serializer serializeMethods = new Serializer(methodSerialize, methodObjectSerialize);
 
-			MethodInfo deserializeMethod = buildType.GetMethod("Deserialize");
+			MsgPackRegistry.RegisterSerializer(typeArray, serializeMethods);
+			MsgPackRegistry.RegisterDeserializer(typeArray, methodDeserialize);
 
-			MsgPackRegistry.RegisterSerializer(typeArray, serializeMethod);
-			MsgPackRegistry.RegisterDeserializer(typeArray, deserializeMethod);
+			return new Tuple<Serializer, MethodInfo>(serializeMethods, methodDeserialize);
+		}
 
-			return new Tuple<Serializer, MethodInfo>(serializeMethod, deserializeMethod);
+		/// <summary>
+		/// Simply unpacks and calls <paramref name="methodSerialize"/>
+		/// </summary>
+		/// <param name="typeArray">Type we're serializing</param>
+		/// <param name="methodSerialize">Method to call once the object is unpacked</param>
+		/// <param name="typeBuilder">Building type to add this method to</param>
+		/// <returns></returns>
+		private static MethodInfo BuildObjectSerializer(Type typeArray, MethodInfo methodSerialize, TypeBuilder typeBuilder)
+		{
+			MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("Serialize",
+				MethodAttributes.Public | MethodAttributes.Static,
+				typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
+			
+			var g = methodSerializeObject.GetILGenerator();
+			g.Emit(OpCodes.Ldarg_0);
+			g.Emit(OpCodes.Ldarg_1);
+			g.Emit(OpCodes.Unbox_Any, typeArray);
+			g.EmitCall(OpCodes.Call, methodSerialize, null);
+			g.Emit(OpCodes.Ret);
+			
+			return methodSerializeObject;
 		}
 
 		private static MethodInfo BuildSerializer(Type type, Type typeArray, TypeBuilder typeBuilder)
@@ -69,7 +86,7 @@ namespace CitizenFX.MsgPack.Formatters
 			// write header
 			g.Emit(OpCodes.Ldarg_0);
 			g.Emit(OpCodes.Ldloc_0);
-			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteArrayHeader", BindingFlags.Instance | BindingFlags.NonPublic), null);
+			g.EmitCall(OpCodes.Call, GetVoidMethod<uint>(WriteArrayHeader), null);
 
 			// i = 0
 			g.Emit(OpCodes.Ldc_I4_0);
@@ -113,7 +130,7 @@ namespace CitizenFX.MsgPack.Formatters
 			// write nil
 			g.MarkLabel(nilWrite);
 			g.Emit(OpCodes.Ldarg_0);
-			g.EmitCall(OpCodes.Call, typeof(MsgPackSerializer).GetMethod("WriteNil", Type.EmptyTypes), null);
+			g.EmitCall(OpCodes.Call, GetVoidMethod(WriteNil), null);
 			g.Emit(OpCodes.Ret);
 
 			return methodSerialize;
@@ -134,7 +151,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 			// get type
 			g.Emit(OpCodes.Ldarg_0);
-			g.EmitCall(OpCodes.Call, GetResultMethod(MsgPackDeserializer.ReadByte), null);
+			g.EmitCall(OpCodes.Call, GetResultMethod(ReadByte), null);
 			g.Emit(OpCodes.Stloc_0);
 
 			// if (array == null) return null
@@ -146,7 +163,7 @@ namespace CitizenFX.MsgPack.Formatters
 			// get size and create array with the read size
 			g.Emit(OpCodes.Ldarg_0);
 			g.Emit(OpCodes.Ldloc_0);
-			g.EmitCall(OpCodes.Call, GetResultMethod<byte, uint>(MsgPackDeserializer.ReadArraySize), null);
+			g.EmitCall(OpCodes.Call, GetResultMethod<byte, uint>(ReadArraySize), null);
 			g.Emit(OpCodes.Stloc_0); // use loc_0 as size now
 
 			if (!genericArray)

@@ -23,6 +23,12 @@ namespace CitizenFX.MsgPack
 			m_objectSerializer = objectSerializer;
 		}
 
+		public Serializer(MethodInfo serializer, MethodInfo objectSerializer)
+		{
+			m_method = serializer;
+			m_objectSerializer = (MsgPackObjectSerializer)objectSerializer.CreateDelegate(typeof(MsgPackObjectSerializer));
+		}
+
 		public static Serializer CreateWithObjectWrapper(MethodInfo method)
 		{
 			var parameters = method.GetParameters();
@@ -30,7 +36,7 @@ namespace CitizenFX.MsgPack
 				throw new ArgumentException("incorrect method was given");
 
 			DynamicMethod dynamicMethod = new DynamicMethod(method.DeclaringType.Name,
-				typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) }, typeof(Serializer).Module, true);
+				typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
 
 			var g = dynamicMethod.GetILGenerator();
 			g.Emit(OpCodes.Ldarg_0);
@@ -42,7 +48,6 @@ namespace CitizenFX.MsgPack
 			g.Emit(OpCodes.Ret);
 
 			return new Serializer(method, (MsgPackObjectSerializer)dynamicMethod.CreateDelegate(typeof(MsgPackObjectSerializer)));
-
 		}
 	}
 
@@ -51,7 +56,7 @@ namespace CitizenFX.MsgPack
 		private static readonly Dictionary<Type, Serializer> m_serializers = new Dictionary<Type, Serializer>();
 		private static readonly Dictionary<Type, MethodInfo> m_deserializers = new Dictionary<Type, MethodInfo>();
 
-		internal static readonly AssemblyBuilder m_assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("CitizenFX.MsgPack.Dynamic"), AssemblyBuilderAccess.RunAndCollect);
+		internal static readonly AssemblyBuilder m_assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("CitizenFX.MsgPack.Dynamic"), AssemblyBuilderAccess.Run);
 		internal static readonly ModuleBuilder m_moduleBuilder = m_assemblyBuilder.DefineDynamicModule("main");
 
 		static MsgPackRegistry()
@@ -175,7 +180,7 @@ namespace CitizenFX.MsgPack
 		{
 			if (type.IsPrimitive)
 			{
-				throw new NotSupportedException("Should've already been registered");
+				throw new NotSupportedException($"{type} should've already been registered");
 			}
 			else if (type.IsArray)
 			{

@@ -12,9 +12,9 @@ namespace CitizenFX.MsgPack
 	[SecuritySafeCritical]
 	public partial struct MsgPackDeserializer
 	{
-		internal struct RestorePoint
+		public struct RestorePoint
 		{
-			public unsafe byte* Ptr { get; private set; }
+			internal unsafe byte* Ptr { get; private set; }
 			internal unsafe RestorePoint(byte* ptr) => this.Ptr = ptr;
 		}
 
@@ -338,24 +338,24 @@ namespace CitizenFX.MsgPack
 #endif
 		}
 
-		private void SkipCallback(uint length) => SkipString(length);
+		internal void SkipCallback(uint length) => SkipString(length);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private Vector2 ReadVector2() => new Vector2(ReadSingleLE(), ReadSingleLE());
-		private unsafe void SkipVector2() => AdvancePointer(2 * sizeof(float));
+		internal Vector2 ReadVector2() => new Vector2(ReadSingleLE(), ReadSingleLE());
+		internal unsafe void SkipVector2() => AdvancePointer(2 * sizeof(float));
 
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private Vector3 ReadVector3() => new Vector3(ReadSingleLE(), ReadSingleLE(), ReadSingleLE());
-		private unsafe void SkipVector3() => AdvancePointer(3 * sizeof(float));
+		internal Vector3 ReadVector3() => new Vector3(ReadSingleLE(), ReadSingleLE(), ReadSingleLE());
+		internal unsafe void SkipVector3() => AdvancePointer(3 * sizeof(float));
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private Vector4 ReadVector4() => new Vector4(ReadSingleLE(), ReadSingleLE(), ReadSingleLE(), ReadSingleLE());
-		private unsafe void SkipVector4() => AdvancePointer(4 * sizeof(float));
+		internal Vector4 ReadVector4() => new Vector4(ReadSingleLE(), ReadSingleLE(), ReadSingleLE(), ReadSingleLE());
+		internal unsafe void SkipVector4() => AdvancePointer(4 * sizeof(float));
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private Quaternion ReadQuaternion() => new Quaternion(ReadSingleLE(), ReadSingleLE(), ReadSingleLE(), ReadSingleLE());
-		private unsafe void SkipQuaternion() => AdvancePointer(4 * sizeof(float));
+		internal Quaternion ReadQuaternion() => new Quaternion(ReadSingleLE(), ReadSingleLE(), ReadSingleLE(), ReadSingleLE());
+		internal unsafe void SkipQuaternion() => AdvancePointer(4 * sizeof(float));
 
 		#endregion
 
@@ -377,48 +377,6 @@ namespace CitizenFX.MsgPack
 
 			return curPtr;
 		}
-
-		#endregion
-
-		#region Statics (easier access with current IL generation)
-
-		internal static uint ReadArraySize(ref MsgPackDeserializer deserializer) => deserializer.ReadArraySize();
-		internal static uint ReadArraySize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadArraySize(type);
-		internal static uint ReadMapSize(ref MsgPackDeserializer deserializer, byte type) => deserializer.ReadMapSize(type);
-
-		internal static byte ReadByte(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
-		internal static float ReadSingle(ref MsgPackDeserializer deserializer) => deserializer.ReadSingle();
-		internal static double ReadDouble(ref MsgPackDeserializer deserializer) => deserializer.ReadDouble();
-		internal static byte ReadUInt8(ref MsgPackDeserializer deserializer) => deserializer.ReadByte();
-		internal static ushort ReadUInt16(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt16();
-		internal static uint ReadUInt32(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt32();
-		internal static ulong ReadUInt64(ref MsgPackDeserializer deserializer) => deserializer.ReadUInt64();
-		internal static sbyte ReadInt8(ref MsgPackDeserializer deserializer) => deserializer.ReadInt8();
-		internal static short ReadInt16(ref MsgPackDeserializer deserializer) => deserializer.ReadInt16();
-		internal static int ReadInt32(ref MsgPackDeserializer deserializer) => deserializer.ReadInt32();
-		internal static long ReadInt64(ref MsgPackDeserializer deserializer) => deserializer.ReadInt64();
-
-		internal static string ReadString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadString(length);
-		internal static void SkipString(ref MsgPackDeserializer deserializer, uint length) => deserializer.SkipString(length);
-		internal static CString ReadCString(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadCString(length);
-		internal static float ReadSingleLE(ref MsgPackDeserializer deserializer) => deserializer.ReadSingleLE();
-
-		internal static object[] ReadObjectArray(ref MsgPackDeserializer deserializer, uint length) => deserializer.ReadObjectArray(length);
-
-		internal static void SkipObject(ref MsgPackDeserializer deserializer) => deserializer.SkipObject();
-		internal static void SkipObjects(ref MsgPackDeserializer deserializer, uint size)
-		{
-			for (uint i = 0; i < size; ++i)
-				deserializer.SkipObject();
-		}
-
-		internal static void SkipVector2(ref MsgPackDeserializer deserializer) => deserializer.SkipVector2();
-		internal static void SkipVector3(ref MsgPackDeserializer deserializer) => deserializer.SkipVector3();
-		internal static void SkipVector4(ref MsgPackDeserializer deserializer) => deserializer.SkipVector4();
-		internal static void SkipQuaternion(ref MsgPackDeserializer deserializer) => deserializer.SkipQuaternion();
-
-		internal static unsafe RestorePoint CreateRestorePoint(ref MsgPackDeserializer deserializer) => deserializer.CreateRestorePoint();
-		internal static unsafe void Restore(ref MsgPackDeserializer deserializer, RestorePoint restorePoint) => deserializer.Restore(restorePoint);
 
 		#endregion
 	}

@@ -1,4 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
+using CitizenFX.Core;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -12,7 +13,7 @@ namespace CitizenFX.MsgPack.Benchmarks
 		{
 			public int a, b, c, d, e;
 			public float f;
-			public CString g { get; set; }
+			public Core.CString g { get; set; }
 			public float h;
 			public int i, j;
 			public double k { set; get; }

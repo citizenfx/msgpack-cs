@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security;
 
-namespace CitizenFX.MsgPack
+namespace CitizenFX.Core
 {
 	/// <summary>
 	/// A byte string that can be used to interop with native code.

@@ -9,6 +9,8 @@ namespace CitizenFX.Core
 	{
 		[MessagePack.Key(0)] public uint m_id = 0;
 
+		[Index(0)] public uint Handle => m_id;
+
 		public Player() => m_id = 0;
 		//public Player(object[] array) => m_id = (uint)array[0];
 		public Player(int id) => m_id = (uint)id;
@@ -20,5 +22,13 @@ namespace CitizenFX.Core
 		public static bool operator !=(Player l, Player r) => !(l == r);
 		public override bool Equals(object o) => o is Player v && this == v;
 		public override int GetHashCode() => (int)m_id;
+
+		#region Serializers
+
+		public static void Serialize(MsgPackSerializer serializer, Player player) => serializer.Serialize(player.Handle);
+
+		public static Player Deserialize(ref MsgPackDeserializer serializer) => new Player(serializer.DeserializeAsInt32());
+
+		#endregion
 	}
 }

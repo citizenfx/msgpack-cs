@@ -119,7 +119,6 @@ namespace CitizenFX.MsgPack.Tests
 			);
 		}
 
-
 		[TestMethod]
 		public void SerializeObjectArray()
 		{
@@ -183,6 +182,22 @@ namespace CitizenFX.MsgPack.Tests
 
 					0xCB, 0x40, 0xC8, 0x1C, 0x80, 0x00, 0x00, 0x00, 0x00, // 12345.0
 					0xCA, 0x51, 0xA2, 0xC7, 0xBE              // 87391973912.23342f
+				}
+			);
+		}
+
+		[TestMethod]
+		public void SerializeExtraTypes()
+		{
+			Validate(
+				new object[]
+				{
+					new Core.Player(1234)
+				}, new byte[]
+				{
+					0x91,                                     // array of 1 item
+					
+					0xCD, 0x04, 0xD2,                         // uint16 1234
 				}
 			);
 		}
