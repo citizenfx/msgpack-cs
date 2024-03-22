@@ -9,7 +9,7 @@ namespace CitizenFX.MsgPack.Benchmarks
 	{
 		private const int Iterations = 1_000_000;
 
-		public delegate TResult TypeDeserializer<out TResult>(MsgPackDeserializer arg);
+		public delegate TResult TypeDeserializer<out TResult>(ref MsgPackDeserializer arg);
 
 		static TypeDeserializer<Player> deserializePlayer;
 		static TypeDeserializer<Vector2> deserializeVector2;
@@ -214,12 +214,12 @@ namespace CitizenFX.MsgPack.Benchmarks
 						deserializer.DeserializeAsUInt32();
 						deserializer.DeserializeAsUInt32();
 						deserializer.DeserializeAsUInt64();
-						deserializePlayer(deserializer);
-						deserializeVector3(deserializer);
-						deserializeVector2(deserializer);
-						deserializeVector4(deserializer);
-						deserializePlayer(deserializer);
-						deserializeVector3(deserializer);
+						deserializePlayer(ref deserializer);
+						deserializeVector3(ref deserializer);
+						deserializeVector2(ref deserializer);
+						deserializeVector4(ref deserializer);
+						deserializePlayer(ref deserializer);
+						deserializeVector3(ref deserializer);
 						/*Deserialize.CallMethod<Player>(deserializer);
 						Deserialize.CallMethod<Vector3>(deserializer);
 						Deserialize.CallMethod<Vector2>(deserializer);

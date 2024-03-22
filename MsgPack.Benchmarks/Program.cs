@@ -11,7 +11,7 @@ namespace CitizenFX.MsgPack.Benchmarks
 	{
 #pragma warning disable CS0162 // unreachable code detected
 
-		private const int IterationCount = 1;
+		private const int IterationCount = 20;
 		private const bool BenchmarkSerialization = true;
 		private const bool BenchmarkSorting = false;
 
