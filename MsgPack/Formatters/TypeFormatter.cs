@@ -688,7 +688,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 						g.Emit(OpCodes.Ldarg_0);
 						g.Emit(OpCodes.Ldloc_3);
-						g.EmitCall(OpCodes.Call, GetVoidMethod<MsgPackDeserializer.RestorePoint>(Restore), null);
+						g.EmitCall(OpCodes.Call, GetVoidMethod(Restore), null);
 
 						g.Emit(OpCodes.Leave, arrayNotBigEnough);
 					}

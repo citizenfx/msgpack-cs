@@ -12,10 +12,16 @@ namespace CitizenFX.MsgPack
 	[SecuritySafeCritical]
 	public ref partial struct MsgPackDeserializer
 	{
-		public struct RestorePoint
+		public ref struct RestorePoint
 		{
-			internal unsafe byte* Ptr { get; private set; }
-			internal unsafe RestorePoint(byte* ptr) => this.Ptr = ptr;
+			internal readonly unsafe byte* m_ptr;
+			internal readonly unsafe byte* m_end;
+
+			internal unsafe RestorePoint(byte* ptr, byte* end)
+			{
+				m_ptr = ptr;
+				m_end = end;
+			}
 		}
 
 		private unsafe byte* m_ptr;
@@ -364,8 +370,13 @@ namespace CitizenFX.MsgPack
 
 		#region Buffer pointer control
 
-		internal unsafe RestorePoint CreateRestorePoint() => new RestorePoint(m_ptr);
-		internal unsafe void Restore(RestorePoint restorePoint) => m_ptr = restorePoint.Ptr;
+		internal unsafe RestorePoint CreateRestorePoint() => new RestorePoint(m_ptr, m_end);
+		internal unsafe void Restore(RestorePoint restorePoint)
+		{
+			m_ptr = m_end == restorePoint.m_end
+				? restorePoint.m_ptr
+				: throw new ArgumentException($"{nameof(RestorePoint)} doesn't belong to this {nameof(MsgPackDeserializer)}");
+		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private unsafe byte* AdvancePointer(uint amount)
