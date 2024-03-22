@@ -1,32 +1,51 @@
 ﻿using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
 using System;
+using System.Diagnostics;
 
 namespace CitizenFX.MsgPack.Benchmarks
 {
 	internal class Program
 	{
+#pragma warning disable CS0162 // unreachable code detected
+
+		private const int IterationCount = 1;
+		private const bool BenchmarkSerialization = true;
+		private const bool BenchmarkSorting = false;
+
+		private const bool RunOnDefault = false;
+		private const bool RunOnMono = true;
+		private const string MonoPath = "C:\\Program Files\\Mono\\bin\\mono.exe";
+
 		static void Main()
 		{
-#pragma warning disable CS0162
+			IConfig config = CreateConfiguration();
 
-			//if (false)
-			{
-				//var config = DefaultConfig.Instance.AddJob(Job.Default.WithRuntime(new MonoRuntime("Mono", "C:\\Program Files\\Mono\\bin\\mono.exe")).WithIterationCount(20));
-				var config = DefaultConfig.Instance.AddJob(Job.Default.WithIterationCount(20));
-				Console.WriteLine(BenchmarkRunner.Run<MsgPackBenchmark>(config));
-			}
+			if (BenchmarkSerialization)
+				BenchmarkRunner.Run<MsgPackBenchmark>(config);
 
-			if (false)
-			{
-				var config = DefaultConfig.Instance.AddJob(Job.Default.WithIterationCount(20));
-				Console.WriteLine(BenchmarkRunner.Run<SortingBenchmark>(config));
-			}
+			if (BenchmarkSorting)
+				BenchmarkRunner.Run<SortingBenchmark>(config);
 
-			Console.ReadLine();
+			if (Debugger.IsAttached)
+				Console.ReadLine();
+		}
+
+		private static IConfig CreateConfiguration()
+		{
+			var config = DefaultConfig.Instance;
+
+			if (RunOnDefault)
+				config.AddJob(Job.Default.WithIterationCount(IterationCount));
+
+			if (RunOnMono)
+				config.AddJob(Job.Default.WithRuntime(new MonoRuntime("Mono", MonoPath)).WithIterationCount(IterationCount));
+
+			return config;
+		}
 
 #pragma warning restore CS0162
-		}
 	}
 }
