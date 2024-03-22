@@ -5,9 +5,9 @@ name: Unit Tests
 
 on:
   push:
-    branches: [ "master", "release", "develop" ]
+    branches: [ "master", "production", "feat/**", "feature/**", "bug/**", "hotfix/**" ]
   pull_request:
-    branches: [ "master", "release", "develop" ]
+    branches: [ "master", "production", "feat/**", "feature/**", "bug/**", "hotfix/**" ]
 
 jobs:
   build:
