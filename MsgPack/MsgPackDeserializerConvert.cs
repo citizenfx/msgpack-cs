@@ -10,7 +10,7 @@ using System.Text;
 
 namespace CitizenFX.MsgPack
 {
-	public partial struct MsgPackDeserializer
+	public ref partial struct MsgPackDeserializer
 	{
 		// NOTE:
 		//   1. When adding any T DeserializeAsT() method, make sure there's an equivalent Serialize(T) in the MsgPackSerializer class.

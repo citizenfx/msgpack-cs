@@ -10,7 +10,7 @@ namespace CitizenFX.MsgPack
 {
 	// Can be a struct as it's merely used for for temporary storage
 	[SecuritySafeCritical]
-	public partial struct MsgPackDeserializer
+	public ref partial struct MsgPackDeserializer
 	{
 		public struct RestorePoint
 		{
@@ -30,6 +30,9 @@ namespace CitizenFX.MsgPack
 		}
 
 		#region Read basic types
+
+		internal unsafe byte PeekByte()	=> m_ptr < m_end
+			? *m_ptr : throw new ArgumentException($"MsgPackDeserializer tried to peek while no bytes remain");
 
 		internal unsafe float ReadSingle()
 		{

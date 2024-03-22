@@ -11,7 +11,7 @@ namespace CitizenFX.MsgPack
 {
 	public delegate object MsgPackFunc(Remote remote, ref MsgPackDeserializer deserializer);
 
-	public partial struct MsgPackDeserializer
+	public ref partial struct MsgPackDeserializer
 	{
 		private static readonly Dictionary<MethodInfo, MethodInfo> s_wrappedMethods = new Dictionary<MethodInfo, MethodInfo>();
 		private static readonly Dictionary<MethodInfo, MethodInfo> s_dynfuncMethods = new Dictionary<MethodInfo, MethodInfo>();
