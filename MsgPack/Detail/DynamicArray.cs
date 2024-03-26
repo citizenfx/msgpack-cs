@@ -80,7 +80,7 @@ namespace CitizenFX.MsgPack.Detail
 					RemoveAt(i);
 				else
 					++i;
-			}			
+			}
 		}
 
 		public void Add(T value)

@@ -45,10 +45,10 @@ namespace CitizenFX.MsgPack
 		Map32 = 0xdf,
 		FixIntNegativeMin = 0xe0,
 		FixIntNegativeMax = 0xff
-    }
+	}
 
-    enum MsgPackExtraTypeCode
-    {
+	enum MsgPackExtraTypeCode
+	{
 		RemoteFunc = 10,
 		LocalFunc = 11,
 
@@ -56,5 +56,5 @@ namespace CitizenFX.MsgPack
 		Vector3 = 21,
 		Vector4 = 22,
 		Quaternion = 22
-    }
+	}
 }

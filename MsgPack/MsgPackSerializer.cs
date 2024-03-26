@@ -321,7 +321,7 @@ namespace CitizenFX.MsgPack
 			else if (length <= 0xFFFFU)
 				WriteBigEndian(MsgPackCode.Ext16, (ushort)length);
 			else
-				WriteBigEndian(MsgPackCode.Ext32,length);
+				WriteBigEndian(MsgPackCode.Ext32, length);
 		}
 
 		private void Write(byte code)

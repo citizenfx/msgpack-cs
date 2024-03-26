@@ -26,7 +26,7 @@ namespace CitizenFX.MsgPack.Formatters
 			{
 				TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
 
-				methodSerialize = BuildSerializer(typeKey, typeValue, typeKeyValuePair, typeIDictionary, typeBuilder);				
+				methodSerialize = BuildSerializer(typeKey, typeValue, typeKeyValuePair, typeIDictionary, typeBuilder);
 				BuildDeserializer(typeKey, typeValue, typeDictionary, typeBuilder);
 				BuildObjectSerializer(typeIDictionary, methodSerialize, typeBuilder);
 
@@ -82,7 +82,7 @@ namespace CitizenFX.MsgPack.Formatters
 			// IDictionary<K, V> (de)serialization
 			MethodBuilder methodSerialize = typeBuilder.DefineMethod("Serialize", MethodAttributes.Public | MethodAttributes.Static,
 				typeof(void), new[] { typeof(MsgPackSerializer), typeIDictionary });
-			
+
 			var g = methodSerialize.GetILGenerator();
 			g.DeclareLocal(typeIEnumerator);
 			g.DeclareLocal(typeKeyValuePair);
@@ -153,7 +153,7 @@ namespace CitizenFX.MsgPack.Formatters
 			MethodBuilder methodDeserialize = typeBuilder.DefineMethod("Deserialize",
 				MethodAttributes.Public | MethodAttributes.Static,
 				typeDictionary, new[] { typeof(MsgPackDeserializer).MakeByRefType() });
-			
+
 			var g = methodDeserialize.GetILGenerator();
 			g.DeclareLocal(typeof(uint)); // type first size after
 			g.DeclareLocal(typeof(uint));

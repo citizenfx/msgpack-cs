@@ -37,7 +37,7 @@ namespace CitizenFX.MsgPack
 
 		#region Read basic types
 
-		internal unsafe byte PeekByte()	=> m_ptr < m_end
+		internal unsafe byte PeekByte() => m_ptr < m_end
 			? *m_ptr : throw new ArgumentException($"MsgPackDeserializer tried to peek while no bytes remain");
 
 		internal unsafe float ReadSingle()
@@ -293,7 +293,7 @@ namespace CitizenFX.MsgPack
 				case 22: return ReadVector4().ToString();
 				case 23: return ReadQuaternion().ToString();
 			}
-			
+
 			SkipExtraType(length);
 			throw new InvalidOperationException($"Extension type {extType} not supported.");
 		}

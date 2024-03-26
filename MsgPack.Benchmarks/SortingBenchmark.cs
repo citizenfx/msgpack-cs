@@ -53,7 +53,7 @@ namespace CitizenFX.MsgPack.Benchmarks
 
 			Console.WriteLine($"{"Same",-10} {"QuickSort",-30} Arry.Sort");
 			for (int i = 0; i < arr1.Count; ++i)
-				Console.WriteLine($"{arr1[i] == arr2[i], -10} {arr1[i],-30} {arr2[i]}");
+				Console.WriteLine($"{arr1[i] == arr2[i],-10} {arr1[i],-30} {arr2[i]}");
 
 		}
 

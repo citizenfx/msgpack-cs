@@ -115,7 +115,7 @@ namespace CitizenFX.MsgPack
 				Type type = obj.GetType();
 				if (type.IsPrimitive)
 				{
-					switch(obj)
+					switch (obj)
 					{
 						case bool v: serializer.Serialize(v); break;
 						case char v: serializer.Serialize(v); break;

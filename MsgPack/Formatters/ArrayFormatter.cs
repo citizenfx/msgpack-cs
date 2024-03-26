@@ -26,7 +26,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 				buildType = typeBuilder.CreateType();
 			}
-			
+
 			methodSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), type });
 			methodDeserialize = buildType.GetMethod("Deserialize");
 			methodObjectSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), typeof(object) });
@@ -51,14 +51,14 @@ namespace CitizenFX.MsgPack.Formatters
 			MethodBuilder methodSerializeObject = typeBuilder.DefineMethod("Serialize",
 				MethodAttributes.Public | MethodAttributes.Static,
 				typeof(void), new[] { typeof(MsgPackSerializer), typeof(object) });
-			
+
 			var g = methodSerializeObject.GetILGenerator();
 			g.Emit(OpCodes.Ldarg_0);
 			g.Emit(OpCodes.Ldarg_1);
 			g.Emit(OpCodes.Unbox_Any, typeArray);
 			g.EmitCall(OpCodes.Call, methodSerialize, null);
 			g.Emit(OpCodes.Ret);
-			
+
 			return methodSerializeObject;
 		}
 
@@ -141,7 +141,7 @@ namespace CitizenFX.MsgPack.Formatters
 			MethodBuilder methodDeserialize = typeBuilder.DefineMethod("Deserialize",
 				MethodAttributes.Public | MethodAttributes.Static,
 				typeArray, new[] { typeof(MsgPackDeserializer).MakeByRefType() });
-			
+
 			bool genericArray = !typeArray.IsArray;
 
 			var g = methodDeserialize.GetILGenerator();
@@ -177,7 +177,7 @@ namespace CitizenFX.MsgPack.Formatters
 			{
 				// loc_2 = new List<T>(loc_0);
 				g.Emit(OpCodes.Ldloc_0);
-				g.Emit(OpCodes.Newobj, typeArray.GetConstructor(new[] { typeof(int) } ));
+				g.Emit(OpCodes.Newobj, typeArray.GetConstructor(new[] { typeof(int) }));
 				g.Emit(OpCodes.Stloc_2);
 			}
 

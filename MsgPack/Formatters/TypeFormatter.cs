@@ -863,7 +863,7 @@ namespace CitizenFX.MsgPack.Formatters
 						memberCurSize = memberNextSize;
 					}
 					while (memberEnd < members.Count);
-					
+
 					g.Emit(OpCodes.Pop); // remove CString
 				}
 				else
@@ -1204,9 +1204,9 @@ namespace CitizenFX.MsgPack.Formatters
 			}
 		}
 
-#endregion
+		#endregion
 
-#region General / Helper
+		#region General / Helper
 
 		private static DynamicArray<MemberInfo> GetReadableMembers(Type type)
 		{
@@ -1276,6 +1276,6 @@ namespace CitizenFX.MsgPack.Formatters
 			g.Emit(OpCodes.Throw);
 		}
 
-#endregion
+		#endregion
 	}
 }

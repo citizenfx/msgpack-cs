@@ -3,9 +3,9 @@ namespace CitizenFX.Core
 {
 	public class Callback
 	{
-        public Callback(string address)
-        {
+		public Callback(string address)
+		{
 
-        }
-    }
+		}
+	}
 }

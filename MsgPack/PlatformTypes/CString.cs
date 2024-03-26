@@ -128,7 +128,7 @@ namespace CitizenFX.Core
 
 			return (int)(s - dst);
 		}
-		
+
 		/// <summary>
 		/// Compares a CString to a C# string only considering ASCII characters (7 bits)
 		/// any non 7 bit characters on either side will return false
