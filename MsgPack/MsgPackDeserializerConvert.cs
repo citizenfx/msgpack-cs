@@ -72,7 +72,7 @@ namespace CitizenFX.MsgPack
 		{
 			MsgPackCode type = ReadType();
 
-			if (type < MsgPackCode.Nil)
+			if (type <= MsgPackCode.FixStrMax)
 			{
 				if (type <= MsgPackCode.FixIntPositiveMax)
 					return type;
@@ -83,9 +83,9 @@ namespace CitizenFX.MsgPack
 
 				return ReadString((uint)type % 32u);
 			}
-			else if (type > MsgPackCode.Map32)
+			else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
 			{
-				return unchecked((sbyte)type); // fix negative number
+				return unchecked((sbyte)type);
 			}
 
 			switch (type)
@@ -138,7 +138,7 @@ namespace CitizenFX.MsgPack
 
 		internal unsafe void SkipObject(MsgPackCode type)
 		{
-			if (type < MsgPackCode.Nil)
+			if (type <= MsgPackCode.FixStrMax)
 			{
 				if (type <= MsgPackCode.FixMapMax)
 					SkipMap((uint)type % 16u);
@@ -149,7 +149,7 @@ namespace CitizenFX.MsgPack
 
 				return;
 			}
-			else if (type > MsgPackCode.Map32)
+			else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
 			{
 				return;
 			}
@@ -210,9 +210,9 @@ namespace CitizenFX.MsgPack
 			MsgPackCode type = ReadType();
 			if (type <= MsgPackCode.FixIntPositiveMax) // positive fixint
 				return type != 0;
-			else if (type < MsgPackCode.Nil) // fixstr
+			else if (type <= MsgPackCode.FixStrMax) // fixstr
 				return ReadStringAsTrueish((uint)type % 32u);
-			else if (type > MsgPackCode.Map32) // negative fixint
+			else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
 				return true; // is always != 0
 
 			switch (type)
@@ -251,10 +251,10 @@ namespace CitizenFX.MsgPack
 				return (uint)type;
 			else if (type >= MsgPackCode.FixStrMin) // fixstr
 			{
-				if (type < MsgPackCode.Nil)
-					return uint.Parse(ReadString((uint)type - 0xA0));
-				else if (type > MsgPackCode.Map32)
-					return unchecked((uint)(sbyte)type); // fix negative number
+				if (type <= MsgPackCode.FixStrMax)
+					return uint.Parse(ReadString((uint)type - (uint)MsgPackCode.FixStrMin));
+				else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
+					return unchecked((uint)(sbyte)type);
 			}
 
 			switch (type)
@@ -295,10 +295,10 @@ namespace CitizenFX.MsgPack
 				return (ulong)type;
 			else if (type >= MsgPackCode.FixStrMin) // fixstr
 			{
-				if (type < MsgPackCode.Nil)
-					return ulong.Parse(ReadString((uint)type - 0xA0));
-				else if (type > MsgPackCode.Map32)
-					return unchecked((ulong)(sbyte)type); // fix negative number
+				if (type <= MsgPackCode.FixStrMax)
+					return ulong.Parse(ReadString((uint)type - (uint)MsgPackCode.FixStrMin));
+				else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
+					return unchecked((ulong)(sbyte)type);
 			}
 
 			switch (type)
@@ -339,10 +339,10 @@ namespace CitizenFX.MsgPack
 				return (int)type;
 			else if (type >= MsgPackCode.FixStrMin) // fixstr
 			{
-				if (type < MsgPackCode.Nil)
-					return int.Parse(ReadString((uint)type - 0xA0));
-				else if (type > MsgPackCode.Map32)
-					return unchecked((int)(sbyte)type); // fix negative number
+				if (type <= MsgPackCode.FixStrMax)
+					return int.Parse(ReadString((uint)type - (uint)MsgPackCode.FixStrMin));
+				else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
+					return unchecked((int)(sbyte)type);
 			}
 
 			switch (type)
@@ -383,10 +383,10 @@ namespace CitizenFX.MsgPack
 				return (long)type;
 			else if (type >= MsgPackCode.FixStrMin) // fixstr
 			{
-				if (type < MsgPackCode.Nil)
-					return long.Parse(ReadString((uint)type - 0xA0));
-				else if (type > MsgPackCode.Map32)
-					return unchecked((long)(sbyte)type); // fix negative number
+				if (type <= MsgPackCode.FixStrMax)
+					return long.Parse(ReadString((uint)type - (uint)MsgPackCode.FixStrMin));
+				else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
+					return unchecked((long)(sbyte)type);
 			}
 
 			switch (type)
@@ -427,10 +427,10 @@ namespace CitizenFX.MsgPack
 				return (float)type;
 			else if (type >= MsgPackCode.FixStrMin) // fixstr
 			{
-				if (type < MsgPackCode.Nil)
-					return float.Parse(ReadString((uint)type - 0xA0));
-				else if (type > MsgPackCode.Map32)
-					return unchecked((float)(sbyte)type); // negative fixint
+				if (type <= MsgPackCode.FixStrMax)
+					return float.Parse(ReadString((uint)type - (uint)MsgPackCode.FixStrMin));
+				else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
+					return unchecked((float)(sbyte)type);
 			}
 
 			switch (type)
@@ -471,10 +471,10 @@ namespace CitizenFX.MsgPack
 				return (double)type;
 			else if (type >= MsgPackCode.FixStrMin) // fixstr
 			{
-				if (type < MsgPackCode.Nil)
-					return double.Parse(ReadString((uint)type - 0xA0));
-				else if (type > MsgPackCode.Map32)
-					return unchecked((double)(sbyte)type); // negative fixint
+				if (type <= MsgPackCode.FixStrMax)
+					return double.Parse(ReadString((uint)type - (uint)MsgPackCode.FixStrMin));
+				else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
+					return unchecked((double)(sbyte)type);
 			}
 
 			switch (type)
@@ -528,9 +528,9 @@ namespace CitizenFX.MsgPack
 				else
 					return ReadString((byte)type % 32u);
 			}
-			else if (type >= MsgPackCode.FixIntNegativeMin)
+			else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
 			{
-				return unchecked((sbyte)type).ToString(); // fix negative number
+				return unchecked((sbyte)type).ToString();
 			}
 
 			switch (type)
