@@ -13,7 +13,7 @@ namespace CitizenFX.MsgPack.Benchmarks
 		{
 			public int a, b, c, d, e;
 			public float f;
-			public Core.CString g { get; set; }
+			public CString g { get; set; }
 			public float h;
 			public int i, j;
 			public double k { set; get; }
@@ -38,8 +38,6 @@ namespace CitizenFX.MsgPack.Benchmarks
 
 		public static void TestSorting()
 		{
-			Console.WriteLine("hi");
-
 			s_members = typeof(TypeWithManyMembers).GetMembers(BindingFlags.Instance | BindingFlags.Public);
 
 			var array1 = new MemberInfo[s_members.Length];

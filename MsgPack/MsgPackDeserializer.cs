@@ -8,7 +8,7 @@ using System.Security;
 
 namespace CitizenFX.MsgPack
 {
-	// Can be a struct as it's merely used for for temporary storage
+	// Can be a struct as it's merely used for temporary storage
 	[SecuritySafeCritical]
 	public ref partial struct MsgPackDeserializer
 	{
