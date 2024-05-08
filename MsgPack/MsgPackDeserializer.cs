@@ -74,6 +74,8 @@ namespace CitizenFX.MsgPack
 			return v;
 		}
 
+		internal MsgPackCode ReadType() => (MsgPackCode)ReadByte();
+
 		internal byte ReadUInt8() => ReadByte();
 
 		internal unsafe ushort ReadUInt16()
