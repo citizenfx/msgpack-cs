@@ -205,6 +205,42 @@ namespace CitizenFX.MsgPack
 				SkipObject();
 		}
 
+		internal byte[] ConvertMsgPackedTypesToByteArray(uint size)
+		{
+		    byte[] array = new byte[size];
+
+		    for (uint i = 0; i < size; ++i)
+			array[i] = (byte)DeserializeAsUInt32();
+
+		    return array;
+		}
+
+		public byte[] DeserializeAsByteArray()
+		{
+		    MsgPackCode type = (MsgPackCode)ReadByte();
+		    if (type >= MsgPackCode.FixArrayMin && type <= MsgPackCode.FixArrayMax)
+			return ConvertMsgPackedTypesToByteArray((byte)type % 16u);
+
+		    switch (type)
+		    {
+			case MsgPackCode.Bin8:
+			    return ReadByteArray(ReadUInt8());
+			case MsgPackCode.Bin16:
+			    return ReadByteArray(ReadUInt16());
+			case MsgPackCode.Bin32:
+			    return ReadByteArray(ReadUInt32());
+			case MsgPackCode.Array16:
+			    return ConvertMsgPackedTypesToByteArray(ReadUInt16());
+			case MsgPackCode.Array32:
+			    return ConvertMsgPackedTypesToByteArray(ReadUInt16());
+		    }
+
+		    SkipObject(type);
+		    throw new InvalidCastException(
+			$"MsgPack type {type} could not be deserialized into type {typeof(byte[])}"
+		    );
+		}
+
 		public unsafe bool DeserializeAsBool()
 		{
 			MsgPackCode type = ReadType();

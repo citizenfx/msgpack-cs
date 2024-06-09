@@ -90,6 +90,22 @@ namespace CitizenFX.MsgPack
 				Write(MsgPackCode.UInt8, v);
 		}
 
+		public void Serialize(byte[] v)
+		{
+		    uint size = (uint)v.Length;
+
+		    if (size <= byte.MaxValue)
+			Write(MsgPackCode.Bin8, unchecked((byte)size));
+		    else if (size <= ushort.MaxValue)
+			WriteBigEndian(MsgPackCode.Bin16, unchecked((ushort)size));
+		    else
+			WriteBigEndian(MsgPackCode.Bin32, size);
+
+		    EnsureCapacity(size);
+		    Array.Copy(v, 0, m_buffer, (int)m_position, size);
+		    m_position += size;
+		}
+
 		public void Serialize(short v)
 		{
 			if (v < 0)
