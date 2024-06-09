@@ -74,6 +74,16 @@ namespace CitizenFX.MsgPack
 			return v;
 		}
 
+		internal unsafe byte[] ReadByteArray(uint size)
+		{
+		    byte* ptr = AdvancePointer(size);
+
+		    byte[] array = new byte[size];
+		    Marshal.Copy((IntPtr)ptr, array, 0, (int)size);
+
+		    return array;
+		}
+
 		internal MsgPackCode ReadType() => (MsgPackCode)ReadByte();
 
 		internal byte ReadUInt8() => ReadByte();
