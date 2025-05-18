@@ -109,9 +109,9 @@ namespace CitizenFX.MsgPack
 		{
             // this works only if msgpack lib is built within fivem, it's not really elegant imho
             // but it works, so let's not break it now, shall we?
-            // TODO: Make this work without depending from ReferenceFunctionManager and make our own
-            // Canonicalization of the reference id
-			// TODO: Add support for by 10 (Remote Delegate)
+            // TODO: Make this work without depending from ReferenceFunctionManager
+			// and make our own Canonicalization of the reference id
+			// TODO: Add support for byte 10 (Remote Delegate)? don't think it's enabled in FiveM currently
             var remote = ReferenceFunctionManager.Create(MsgPackDeserializer.CreateDelegate(d));
             uint size = (uint)remote.Value.LongLength;
             EnsureCapacity((uint)remote .Value.Length);
