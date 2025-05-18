@@ -197,31 +197,43 @@ namespace CitizenFX.MsgPack
 		public unsafe void Serialize(double v) => WriteBigEndian(MsgPackCode.Float64, *(ulong*)&v);
 
 		[SecuritySafeCritical]
-		public unsafe void Serialize(string v)
-		{
-			fixed (char* p_value = v)
-			{
-				uint size = (uint)CString.UTF8EncodeLength(p_value, v.Length);
+        public unsafe void Serialize(string v)
+        {
+            fixed (char* p_value = v)
+            {
+                uint size = (uint)CString.UTF8EncodeLength(p_value, v.Length);
+                uint totalSize = size + 1;
+				EnsureCapacity(totalSize);
 
-				if (size < (MsgPackCode.FixStrMax - MsgPackCode.FixStrMin))
-					Write(unchecked((byte)((uint)MsgPackCode.FixStrMin + size)));
-				else if (size <= byte.MaxValue)
-					Write(MsgPackCode.Str8, unchecked((byte)size));
-				else if (size <= ushort.MaxValue)
-					Write(MsgPackCode.Str16, unchecked((byte)size));
-				else
-					Write(MsgPackCode.Str32, unchecked((byte)size));
-
-				EnsureCapacity(size);
-				fixed (byte* p_buffer = m_buffer)
-				{
-					CString.UTF8Encode(p_buffer + m_position, p_value, v.Length);
-					m_position += size;
-				}
-			}
-		}
-
-		public unsafe void Serialize(CString v)
+                if (size < (MsgPackCode.FixStrMax - MsgPackCode.FixStrMin))
+                    Write(unchecked((byte)((uint)MsgPackCode.FixStrMin + size)));
+                else if (size <= byte.MaxValue)
+                {
+                    Write(unchecked((byte)(uint)MsgPackCode.Str8));
+                    Write(unchecked((byte)size));
+                }
+                else if (size <= ushort.MaxValue)
+                {
+                    Write(unchecked((byte)(uint)MsgPackCode.Str16));
+                    Write(unchecked((byte)(size >> 8)));
+                    Write(unchecked((byte)(size & 0xFF)));
+                }
+                else
+                {
+                    Write(unchecked((byte)(uint)MsgPackCode.Str32));
+                    Write(unchecked((byte)(size >> 24)));
+                    Write(unchecked((byte)(size >> 16)));
+                    Write(unchecked((byte)(size >> 8)));
+                    Write(unchecked((byte)(size & 0xFF)));
+                }
+                fixed (byte* p_buffer = m_buffer)
+                {
+                    CString.UTF8Encode(p_buffer + m_position, p_value, v.Length);
+                    m_position += size;
+                }
+            }
+        }
+        public unsafe void Serialize(CString v)
 		{
 			fixed (byte* p_value = v.value)
 			{

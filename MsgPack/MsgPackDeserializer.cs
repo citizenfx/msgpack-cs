@@ -126,7 +126,7 @@ namespace CitizenFX.MsgPack
 		internal unsafe string ReadString(uint length)
 		{
 			sbyte* v = (sbyte*)AdvancePointer(length);
-			return new string(v, 0, (int)length);
+            return new string(v, 0, (int)length);
 		}
 
 		internal unsafe CString ReadCString(uint length)

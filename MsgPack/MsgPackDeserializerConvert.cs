@@ -511,7 +511,7 @@ namespace CitizenFX.MsgPack
 		public string DeserializeAsString()
 		{
 			MsgPackCode type = (MsgPackCode)ReadByte();
-			if (type <= MsgPackCode.FixStrMax)
+            if (type <= MsgPackCode.FixStrMax)
 			{
 				if (type <= MsgPackCode.FixIntPositiveMax)
 					return ((byte)type).ToString();
