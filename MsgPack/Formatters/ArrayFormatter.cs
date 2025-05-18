@@ -13,7 +13,7 @@ namespace CitizenFX.MsgPack.Formatters
 		{
 			MethodInfo methodSerialize, methodDeserialize, methodObjectSerialize;
 
-			string name = $"ArrayFormatter<{typeArray.FullName}>";
+			string name = $"ArrayFormatter[{typeArray.FullName}]";
 			Type buildType = MsgPackRegistry.m_moduleBuilder.GetType(name);
 
 			if (buildType == null)

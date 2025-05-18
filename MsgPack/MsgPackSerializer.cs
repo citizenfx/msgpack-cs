@@ -10,17 +10,17 @@ namespace CitizenFX.MsgPack
 	/// </summary>
 	public class MsgPackSerializer
 	{
-		// NOTE:
-		//   1. When adding any Serialize(T) method, make sure there's an equivalent T DeserializeAsT() in the MsgPackDeserializer class.
-		//   2. Serialize(T) write headers, sizes, and pick the correct Write*([MsgPackCode,] T) method.
-		//   3. Write*([MsgPackCode,] T) write directly to memory, these should stay private.
-		//   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
+        // NOTE:
+        //   1. When adding any Serialize(T) method, make sure there's an equivalent T DeserializeAsT() in the MsgPackDeserializer class.
+        //   2. Serialize(T) write headers, sizes, and pick the correct Write*([MsgPackCode,] T) method.
+        //   3. Write*([MsgPackCode,] T) write directly to memory, these should stay private.
+        //   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
 
-		// TODO: look into and profile non-pinned alternatives for interop with C++
-		byte[] m_buffer;
+        // TODO: look into and profile non-pinned alternatives for interop with C++
+        byte[] m_buffer;
 		ulong m_position;
 
-		public MsgPackSerializer()
+        public MsgPackSerializer()
 		{
 			m_buffer = new byte[256];
 		}
@@ -50,7 +50,7 @@ namespace CitizenFX.MsgPack
 				byte[] oldBuffer = m_buffer;
 				m_buffer = new byte[oldBuffer.Length * 2];
 				Array.Copy(oldBuffer, m_buffer, oldBuffer.Length);
-			}
+            }
 		}
 
 		public static byte[] SerializeToByteArray(object value)
@@ -60,7 +60,7 @@ namespace CitizenFX.MsgPack
 			return serializer.ToArray();
 		}
 
-		#region Basic type serializtion
+		#region Basic type serialization
 
 		public void Serialize(bool value)
 		{
@@ -69,7 +69,7 @@ namespace CitizenFX.MsgPack
 
 		public void Serialize(object v) => MsgPackRegistry.Serialize(this, v);
 
-		public void Serialize(sbyte v)
+        public void Serialize(sbyte v)
 		{
 			if (v < 0)
 			{
@@ -105,7 +105,23 @@ namespace CitizenFX.MsgPack
 				Serialize(unchecked((ushort)v));
 		}
 
-		public void Serialize(ushort v)
+        public void Serialize(Delegate d)
+		{
+            // this works only if msgpack lib is built within fivem, it's not really elegant imho
+            // but it works, so let's not break it now, shall we?
+            // TODO: Make this work without depending from ReferenceFunctionManager and make our own
+            // Canonicalization of the reference id
+			// TODO: Add support for by 10 (Remote Delegate)
+            var remote = ReferenceFunctionManager.Create(MsgPackDeserializer.CreateDelegate(d));
+            uint size = (uint)remote.Value.LongLength;
+            EnsureCapacity((uint)remote .Value.Length);
+            WriteExtraTypeHeader(size);
+            Write((byte)11);
+			Array.Copy(remote .Value, 0, m_buffer, (int)m_position, size);
+			m_position += size;
+        }
+
+        public void Serialize(ushort v)
 		{
 			if (v <= (byte)MsgPackCode.FixIntPositiveMax)
 				Write(unchecked((byte)v));
@@ -304,7 +320,7 @@ namespace CitizenFX.MsgPack
 				WriteBigEndian(MsgPackCode.Array32, v);
 		}
 
-		internal void WriteExtraTypeHeader(uint length, byte extType)
+		internal void WriteExtraTypeHeader(uint length, byte extType = 0)
 		{
 			switch (length)
 			{
@@ -401,7 +417,56 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
-		private void WriteBigEndian(MsgPackCode code, sbyte value) => WriteBigEndian(code, unchecked((byte)value));
+        private void PrivatePackExtendedTypeValueCore(byte typeCode, byte[] body)
+        {
+            switch (body.Length)
+            {
+                case 1:
+                    Write(212);
+                    break;
+                case 2:
+                    Write(213);
+                    break;
+                case 4:
+                    Write(214);
+                    break;
+                case 8:
+                    Write(215);
+                    break;
+                case 16:
+                    Write(216);
+                    break;
+                default:
+                    if (body.Length < 256)
+                    {
+                        Write(199);
+                        Write((byte)((uint)body.Length & 0xFFu));
+                    }
+                    else if (body.Length < 65536)
+                    {
+                        Write(200);
+                        Write((byte)((uint)(body.Length >> 8) & 0xFFu));
+                        Write((byte)((uint)body.Length & 0xFFu));
+                    }
+                    else
+                    {
+                        Write(201);
+                        Write((byte)((uint)(body.Length >> 24) & 0xFFu));
+                        Write((byte)((uint)(body.Length >> 16) & 0xFFu));
+                        Write((byte)((uint)(body.Length >> 8) & 0xFFu));
+                        Write((byte)((uint)body.Length & 0xFFu));
+                    }
+
+                    break;
+            }
+
+            Write(typeCode);
+            foreach (byte value2 in body)
+            {
+                Write(value2);
+            }
+        }
+        private void WriteBigEndian(MsgPackCode code, sbyte value) => WriteBigEndian(code, unchecked((byte)value));
 		private void WriteBigEndian(MsgPackCode code, short value) => WriteBigEndian(code, unchecked((ushort)value));
 		private void WriteBigEndian(MsgPackCode code, int value) => WriteBigEndian(code, unchecked((uint)value));
 		private void WriteBigEndian(MsgPackCode code, long value) => WriteBigEndian(code, unchecked((ulong)value));

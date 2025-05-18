@@ -335,11 +335,11 @@ namespace CitizenFX.MsgPack
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal Callback ReadCallback(uint length)
 		{
-			var refFunc = ReadString(length);
+            var refFunc = ReadString(length);
 #if !MONO_V2 // we don't have mock ups of these on our MsgPack project
 			return null;
 #else
-			return m_netSource is null
+            return m_netSource is null
 				? _LocalFunction.Create(refFunc)
 #if REMOTE_FUNCTION_ENABLED
 				: _RemoteFunction.Create(refFunc, m_netSource);

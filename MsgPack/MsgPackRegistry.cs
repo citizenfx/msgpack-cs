@@ -132,9 +132,14 @@ namespace CitizenFX.MsgPack
 
 						case float v: serializer.Serialize(v); break;
 						case double v: serializer.Serialize(v); break;
-					}
+                    }
 				}
-				else if (TryGetSerializer(type, out var methodInfo))
+                else if (obj is Delegate del)
+                {
+                    // add remote function delegate support ? - don't think if it's even planned or supported
+                    serializer.Serialize(del);
+                }
+                else if (TryGetSerializer(type, out var methodInfo))
 				{
 					methodInfo.m_objectSerializer(serializer, obj);
 				}
@@ -178,9 +183,12 @@ namespace CitizenFX.MsgPack
 
 		private static Tuple<Serializer, MethodInfo> CreateSerializer(Type type)
 		{
-			if (type.IsPrimitive)
+            if (type.IsPrimitive)
 			{
-				throw new NotSupportedException($"{type} should've already been registered");
+				if (m_serializers.ContainsKey(type))
+					return new Tuple<Serializer, MethodInfo>(m_serializers[type], m_serializers[type].m_method);
+				else
+					throw new NotSupportedException($"{type} should've already been registered");
 			}
 			else if (type.IsArray)
 			{
@@ -193,19 +201,18 @@ namespace CitizenFX.MsgPack
 			else if (type.IsGenericType)
 			{
 				var genericTypes = type.GetGenericArguments();
-				switch (genericTypes.Length)
+                switch (genericTypes.Length)
 				{
 					case 1:
 						{
-							if (ImplementsGenericTypeDefinition(type, typeof(List<>)))
+							if (ImplementsGenericTypeDefinition(type, typeof(IEnumerable<>)))
 								return ArrayFormatter.Build(genericTypes[0], type);
 						}
 						break;
 					case 2:
 						{
-							if (ImplementsGenericTypeDefinition(type, typeof(IDictionary<,>)))
+                            if (ImplementsGenericTypeDefinition(type, typeof(IDictionary<,>)))
 								return DictionaryFormatter.Build(genericTypes[0], genericTypes[1]);
-
 							break;
 						}
 				}
