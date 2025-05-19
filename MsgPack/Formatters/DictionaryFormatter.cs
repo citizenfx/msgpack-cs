@@ -19,7 +19,7 @@ namespace CitizenFX.MsgPack.Formatters
 			Type typeIDictionary = typeof(IDictionary<,>).MakeGenericType(typeKey, typeValue);
 			Type typeIReadOnlyDictionary = typeof(IReadOnlyDictionary<,>).MakeGenericType(typeKey, typeValue);
 
-			string name = $"DictionaryFormatter[{typeKey.FullName}, {typeValue.FullName}]";
+			string name = $"DictionaryFormatter_{typeKey.FullName}_{typeValue.FullName}";
 			Type buildType = MsgPackRegistry.m_moduleBuilder.GetType(name);
 
 			if (buildType == null)
