@@ -139,6 +139,20 @@ namespace CitizenFX.MsgPack
                     // add remote function delegate support ? - don't think if it's even planned or supported
                     serializer.Serialize(del);
                 }
+                // byte[] is a special type handled like a Binary object. 
+                // It is not a primitive type, so i serialized as a binary object and deserialized as such.
+                else if (obj is byte[] b)
+				{
+					serializer.Serialize(b);
+				}
+                // same applies to List<byte>
+				// we serialize it as a byte array and deserialize it as such
+				// it's not elegant but i needed to handle it like this as byte is a binary format even in List
+				// Ps: Who the fuck in fivem would retrieve and send List<byte>??????
+                else if (obj is List<byte> lb)
+                {
+                    serializer.Serialize(lb.ToArray());
+                }
                 else if (TryGetSerializer(type, out var methodInfo))
 				{
 					methodInfo.m_objectSerializer(serializer, obj);
@@ -176,7 +190,7 @@ namespace CitizenFX.MsgPack
 
 		internal static MethodInfo GetOrCreateDeserializer(Type type)
 		{
-			return TryGetDeserializer(type, out var methodInfo)
+            return TryGetDeserializer(type, out var methodInfo)
 				? methodInfo
 				: CreateSerializer(type)?.Item2;
 		}
@@ -192,7 +206,7 @@ namespace CitizenFX.MsgPack
 			}
 			else if (type.IsArray)
 			{
-				switch (type.GetArrayRank())
+                switch (type.GetArrayRank())
 				{
 					case 1:
 						return ArrayFormatter.Build(type.GetElementType(), type);
@@ -205,7 +219,7 @@ namespace CitizenFX.MsgPack
 				{
 					case 1:
 						{
-							if (ImplementsGenericTypeDefinition(type, typeof(IEnumerable<>)))
+							if (ImplementsGenericTypeDefinition(type, typeof(List<>)))
 								return ArrayFormatter.Build(genericTypes[0], type);
 						}
 						break;

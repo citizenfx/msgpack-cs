@@ -621,11 +621,28 @@ namespace CitizenFX.MsgPack
 			return array;
 		}
 
-		#endregion
+		public byte[] DeserializeByteArray()
+		{
+			MsgPackCode type = (MsgPackCode)ReadByte();
+			switch (type)
+			{
+                case MsgPackCode.Bin8: return ReadBytes(ReadUInt8());
+                case MsgPackCode.Bin16: return ReadBytes(ReadUInt16());
+                case MsgPackCode.Bin32: return ReadBytes(ReadUInt32());
+            }
+			throw new InvalidOperationException($"Tried to decode invalid MsgPack type {type}");
+        }
 
-		#region Extra types
+		public List<byte> DeserializeAsByteList()
+		{
+            return new List<byte>(DeserializeByteArray());
+        }
 
-		public Callback DeserializeAsCallback()
+        #endregion
+
+        #region Extra types
+
+        public Callback DeserializeAsCallback()
 		{
 
 			byte type = ReadByte();
@@ -670,6 +687,8 @@ namespace CitizenFX.MsgPack
         public static uint DeserializeAsUInt32(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsUInt32();
 		public static string DeserializeAsString(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsString();
 		public static string[] DeserializeAsStringArray(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsStringArray();
+		public static byte[] DeserializeByteArray(ref MsgPackDeserializer deserializer) => deserializer.DeserializeByteArray();
+		public static List<byte> DeserializeAsByteList(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsByteList();
 
         #endregion
     }

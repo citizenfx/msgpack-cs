@@ -1,5 +1,6 @@
 ﻿using CitizenFX.Core;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Security;
 
@@ -254,11 +255,93 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
-		#endregion
+		public unsafe void Serialize(IEnumerable enumerable)
+		{
+			switch(enumerable) 
+			{
+				case byte[] b:
+                fixed (byte* p_value = b)
+				{
+					var size = (uint)b.LongLength;
+                    if (size <= byte.MaxValue)
+                        Write(MsgPackCode.Bin8, unchecked((byte)size));
+                    else if (size <= ushort.MaxValue)
+                        Write(MsgPackCode.Bin16, unchecked((byte)size));
+                    else
+                        Write(MsgPackCode.Bin32, unchecked((byte)size)); 
+					EnsureCapacity(size);
+                    Array.Copy(b, 0, m_buffer, (int)m_position, size);
+                    m_position += size;
+                }
+				break;
+            }
 
-		#region Premade associative array serializers
+        }
+        /*
+                    else if(obj is IEnumerable enumerable) // this includes any container like, arrays and generic ones (ICollection)
+                    {
+                        switch (enumerable)
+                        {
+                            case byte[] bytes:
+                                Pack(packer, bytes);
+                                return;
 
-		public void Serialize(IReadOnlyDictionary<string, string> v)
+                            case IDictionary<string, object> dictStringObject: // more common than below, also faster iteration
+                                {
+                                    packer.PackMapHeader(dictStringObject.Count);
+                                    foreach (var kvp in dictStringObject)
+                                    {
+                                        Serialize(kvp.Key, packer);
+                                        Serialize(kvp.Value, packer);
+                                    }
+                                }
+                                return;
+
+                            case IDictionary dict: // less common than above, will handle all types of dictionaries. 1.3 (30%) times slower than above
+                                {
+                                    packer.PackMapHeader(dict.Count);
+                                    foreach (DictionaryEntry kvp in dict)
+                                    {
+                                        Serialize(kvp.Key, packer);
+                                        Serialize(kvp.Value, packer);
+                                    }
+                                }
+                                return;
+
+                            case IList array: // any array like, including T[] and List<T>
+                                {
+                                    packer.PackArrayHeader(array.Count);
+                                    for (int i = 0; i < array.Count; ++i)
+                                    {
+                                        Serialize(array[i], packer);
+                                    }
+                                }
+                                return;
+
+                            default: // unknown/undefined size, so go through them
+                                {
+                                    var list = new List<object>();
+                                    foreach (var item in enumerable)
+                                    {
+                                        list.Add(item);
+                                    }
+
+                                    packer.PackArrayHeader(list.Count);
+                                    for (int i = 0; i < list.Count; ++i)
+                                    {
+                                        Serialize(list[i], packer);
+                                    }
+                                }
+                                return;
+                        }
+                    } */
+
+
+        #endregion
+
+        #region Premade associative array serializers
+
+        public void Serialize(IReadOnlyDictionary<string, string> v)
 		{
 			WriteMapHeader((uint)v.Count);
 			foreach (var keyValue in v)

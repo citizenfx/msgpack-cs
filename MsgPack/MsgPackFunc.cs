@@ -339,7 +339,21 @@ namespace CitizenFX.MsgPack
 					g.Emit(ldarg_deserializer);
 					g.Emit(OpCodes.Call, GetResultMethod<string[]>(DeserializeAsStringArray));
 				}
-				else if (t == typeof(string) || t == typeof(object)) // raw data; simply pass it on
+				else if (t == typeof(byte[]))
+				{
+                    ++p;
+
+                    g.Emit(ldarg_deserializer);
+                    g.Emit(OpCodes.Call, GetResultMethod<byte[]>(DeserializeByteArray));
+                }
+                else if (t == typeof(List<byte>))
+                {
+                    ++p;
+
+                    g.Emit(ldarg_deserializer);
+                    g.Emit(OpCodes.Call, GetResultMethod<List<byte>>(DeserializeAsByteList));
+                }
+                else if (t == typeof(string) || t == typeof(object)) // raw data; simply pass it on
 				{
 					if (p == 1)
 					{
