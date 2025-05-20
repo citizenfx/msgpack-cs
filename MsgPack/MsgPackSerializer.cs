@@ -106,21 +106,35 @@ namespace CitizenFX.MsgPack
 				Serialize(unchecked((ushort)v));
 		}
 
-        public void Serialize(Delegate d)
+		public void Serialize(Delegate d)
 		{
             // this works only if msgpack lib is built within fivem, it's not really elegant imho
             // but it works, so let's not break it now, shall we?
-            // TODO: Make this work without depending from ReferenceFunctionManager
-			// and make our own Canonicalization of the reference id
-			// TODO: Add support for byte 10 (Remote Delegate)? don't think it's enabled in FiveM currently
-            var remote = ReferenceFunctionManager.Create(MsgPackDeserializer.CreateDelegate(d));
-            uint size = (uint)remote.Value.LongLength;
-            EnsureCapacity((uint)remote .Value.Length);
-            WriteExtraTypeHeader(size);
-            Write((byte)11);
-			Array.Copy(remote .Value, 0, m_buffer, (int)m_position, size);
+            // Do we want to make this work without depending from ReferenceFunctionManager
+            // and make our own Canonicalization of the reference id?
+#if REMOTE_FUNCTION_ENABLED
+			ulong callbackId = d.Target is _RemoteHandler _pf
+                ? _pf.m_id
+                : ExternalsManager.RegisterRemoteFunction(d.Method.ReturnType, new DynFunc(args =>
+                    args.Length == 1 || args[1] == null ? dynFunc(args[0]) : null));
+
+            var bytes = Encoding.UTF8.GetBytes(callbackId.ToString());
+			uint size = (uint)bytes.LongLength;
+			EnsureCapacity((uint)bytes.Length);
+			WriteExtraTypeHeader(size);
+			Write((byte)10);
+			Array.Copy(bytes, 0, m_buffer, (int)m_position, size);
 			m_position += size;
-        }
+#else
+            var remote = ReferenceFunctionManager.Create(MsgPackDeserializer.CreateDelegate(d));
+			uint size = (uint)remote.Value.LongLength;
+			EnsureCapacity((uint)remote.Value.Length);
+			WriteExtraTypeHeader(size);
+			Write((byte)11);
+			Array.Copy(remote.Value, 0, m_buffer, (int)m_position, size);
+			m_position += size;
+#endif
+		}
 
         public void Serialize(ushort v)
 		{
@@ -277,66 +291,7 @@ namespace CitizenFX.MsgPack
             }
 
         }
-        /*
-                    else if(obj is IEnumerable enumerable) // this includes any container like, arrays and generic ones (ICollection)
-                    {
-                        switch (enumerable)
-                        {
-                            case byte[] bytes:
-                                Pack(packer, bytes);
-                                return;
-
-                            case IDictionary<string, object> dictStringObject: // more common than below, also faster iteration
-                                {
-                                    packer.PackMapHeader(dictStringObject.Count);
-                                    foreach (var kvp in dictStringObject)
-                                    {
-                                        Serialize(kvp.Key, packer);
-                                        Serialize(kvp.Value, packer);
-                                    }
-                                }
-                                return;
-
-                            case IDictionary dict: // less common than above, will handle all types of dictionaries. 1.3 (30%) times slower than above
-                                {
-                                    packer.PackMapHeader(dict.Count);
-                                    foreach (DictionaryEntry kvp in dict)
-                                    {
-                                        Serialize(kvp.Key, packer);
-                                        Serialize(kvp.Value, packer);
-                                    }
-                                }
-                                return;
-
-                            case IList array: // any array like, including T[] and List<T>
-                                {
-                                    packer.PackArrayHeader(array.Count);
-                                    for (int i = 0; i < array.Count; ++i)
-                                    {
-                                        Serialize(array[i], packer);
-                                    }
-                                }
-                                return;
-
-                            default: // unknown/undefined size, so go through them
-                                {
-                                    var list = new List<object>();
-                                    foreach (var item in enumerable)
-                                    {
-                                        list.Add(item);
-                                    }
-
-                                    packer.PackArrayHeader(list.Count);
-                                    for (int i = 0; i < list.Count; ++i)
-                                    {
-                                        Serialize(list[i], packer);
-                                    }
-                                }
-                                return;
-                        }
-                    } */
-
-
+        
         #endregion
 
         #region Premade associative array serializers
