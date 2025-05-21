@@ -132,9 +132,28 @@ namespace CitizenFX.MsgPack
 
 						case float v: serializer.Serialize(v); break;
 						case double v: serializer.Serialize(v); break;
-					}
+                    }
 				}
-				else if (TryGetSerializer(type, out var methodInfo))
+                else if (obj is Delegate del)
+                {
+                    // add remote function delegate support ? - don't think if it's even planned or supported
+                    serializer.Serialize(del);
+                }
+                // byte[] is a special type handled like a Binary object. 
+                // It is not a primitive type, so i serialized as a binary object and deserialized as such.
+                else if (obj is byte[] b)
+				{
+					serializer.Serialize(b);
+				}
+                // same applies to List<byte>
+				// we serialize it as a byte array and deserialize it as such
+				// it's not elegant but i needed to handle it like this as byte is a binary format even in List
+				// Ps: Who the fuck in fivem would retrieve and send List<byte>??????
+                else if (obj is List<byte> lb)
+                {
+                    serializer.Serialize(lb.ToArray());
+                }
+                else if (TryGetSerializer(type, out var methodInfo))
 				{
 					methodInfo.m_objectSerializer(serializer, obj);
 				}
@@ -171,20 +190,23 @@ namespace CitizenFX.MsgPack
 
 		internal static MethodInfo GetOrCreateDeserializer(Type type)
 		{
-			return TryGetDeserializer(type, out var methodInfo)
+            return TryGetDeserializer(type, out var methodInfo)
 				? methodInfo
 				: CreateSerializer(type)?.Item2;
 		}
 
 		private static Tuple<Serializer, MethodInfo> CreateSerializer(Type type)
 		{
-			if (type.IsPrimitive)
+            if (type.IsPrimitive)
 			{
-				throw new NotSupportedException($"{type} should've already been registered");
+				if (m_serializers.ContainsKey(type))
+					return new Tuple<Serializer, MethodInfo>(m_serializers[type], m_serializers[type].m_method);
+				else
+					throw new NotSupportedException($"{type} should've already been registered");
 			}
 			else if (type.IsArray)
 			{
-				switch (type.GetArrayRank())
+                switch (type.GetArrayRank())
 				{
 					case 1:
 						return ArrayFormatter.Build(type.GetElementType(), type);
@@ -193,7 +215,7 @@ namespace CitizenFX.MsgPack
 			else if (type.IsGenericType)
 			{
 				var genericTypes = type.GetGenericArguments();
-				switch (genericTypes.Length)
+                switch (genericTypes.Length)
 				{
 					case 1:
 						{
@@ -203,9 +225,8 @@ namespace CitizenFX.MsgPack
 						break;
 					case 2:
 						{
-							if (ImplementsGenericTypeDefinition(type, typeof(IDictionary<,>)))
+                            if (ImplementsGenericTypeDefinition(type, typeof(IDictionary<,>)))
 								return DictionaryFormatter.Build(genericTypes[0], genericTypes[1]);
-
 							break;
 						}
 				}

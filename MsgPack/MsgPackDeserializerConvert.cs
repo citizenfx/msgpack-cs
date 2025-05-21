@@ -511,7 +511,7 @@ namespace CitizenFX.MsgPack
 		public string DeserializeAsString()
 		{
 			MsgPackCode type = (MsgPackCode)ReadByte();
-			if (type <= MsgPackCode.FixStrMax)
+            if (type <= MsgPackCode.FixStrMax)
 			{
 				if (type <= MsgPackCode.FixIntPositiveMax)
 					return ((byte)type).ToString();
@@ -621,46 +621,77 @@ namespace CitizenFX.MsgPack
 			return array;
 		}
 
-		#endregion
-
-		#region Extra types
-
-		public Callback DeserializeAsCallback()
+		public byte[] DeserializeByteArray()
 		{
-			MsgPackCode type = ReadType();
+			MsgPackCode type = (MsgPackCode)ReadByte();
 			switch (type)
 			{
-				case MsgPackCode.Ext8: SkipBytes(1); goto case MsgPackCode.FixExt16;
-				case MsgPackCode.Ext16: SkipBytes(2); goto case MsgPackCode.FixExt16;
-				case MsgPackCode.Ext32: SkipBytes(4); goto case MsgPackCode.FixExt16;
+                case MsgPackCode.Bin8: return ReadBytes(ReadUInt8());
+                case MsgPackCode.Bin16: return ReadBytes(ReadUInt16());
+                case MsgPackCode.Bin32: return ReadBytes(ReadUInt32());
+            }
+			throw new InvalidOperationException($"Tried to decode invalid MsgPack type {type}");
+        }
 
-				case MsgPackCode.FixExt1: // 1
-				case MsgPackCode.FixExt2: // 2
-				case MsgPackCode.FixExt4: // 4
-				case MsgPackCode.FixExt8: // 8
-				case MsgPackCode.FixExt16: // 16
-					{
-						var extType = ReadByte();
-						return extType == 10 || extType == 11
-							? ReadCallback(ReadUInt8())
-							: throw new InvalidCastException($"MsgPack extra type {extType} could not be deserialized into type {typeof(Callback)}");
-					}
-			}
+		public List<byte> DeserializeAsByteList()
+		{
+            return new List<byte>(DeserializeByteArray());
+        }
 
-			SkipObject(type);
-			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(Callback)}");
-		}
+        #endregion
 
-		#endregion
+        #region Extra types
 
-		#region Statics (easier access with current IL generation)
+        public Callback DeserializeAsCallback()
+		{
 
-		public static uint DeserializeAsUInt32(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsUInt32();
+			byte type = ReadByte();
+            uint length = 0;
+            switch (type)
+            {
+                case 0xC7:
+                    length = ReadUInt8();
+                    break;
+                case 0xC8:
+                    length = ReadUInt16();
+                    break;
+                case 0xC9:
+                    length = ReadUInt32();
+                    break;
+                case 0xD4:
+                    length = 1;
+                    break;
+                case 0xD5:
+                    length = 2;
+                    break;
+                case 0xD6:
+                    length = 4;
+                    break;
+                case 0xD7:
+                    length = 8;
+                    break;
+                case 0xD8:
+                    length = 16;
+                    break;
+            }
+            var extType = ReadByte();
+            return extType == 10 || extType == 11
+                ? ReadCallback(length)
+                : throw new InvalidCastException($"MsgPack extra type {extType} could not be deserialized into type {typeof(Callback)}");
+        }
+
+        #endregion
+
+        #region Statics (easier access with current IL generation)
+
+        public static uint DeserializeAsUInt32(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsUInt32();
 		public static string DeserializeAsString(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsString();
 		public static string[] DeserializeAsStringArray(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsStringArray();
+		public static byte[] DeserializeByteArray(ref MsgPackDeserializer deserializer) => deserializer.DeserializeByteArray();
+		public static List<byte> DeserializeAsByteList(ref MsgPackDeserializer deserializer) => deserializer.DeserializeAsByteList();
 
-		#endregion
-	}
+        #endregion
+    }
 }
 
 #pragma warning restore IDE0004 // Remove unnecessary cast

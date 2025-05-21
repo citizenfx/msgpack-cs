@@ -1,5 +1,6 @@
 ﻿using CitizenFX.Core;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Security;
 
@@ -10,17 +11,17 @@ namespace CitizenFX.MsgPack
 	/// </summary>
 	public class MsgPackSerializer
 	{
-		// NOTE:
-		//   1. When adding any Serialize(T) method, make sure there's an equivalent T DeserializeAsT() in the MsgPackDeserializer class.
-		//   2. Serialize(T) write headers, sizes, and pick the correct Write*([MsgPackCode,] T) method.
-		//   3. Write*([MsgPackCode,] T) write directly to memory, these should stay private.
-		//   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
+        // NOTE:
+        //   1. When adding any Serialize(T) method, make sure there's an equivalent T DeserializeAsT() in the MsgPackDeserializer class.
+        //   2. Serialize(T) write headers, sizes, and pick the correct Write*([MsgPackCode,] T) method.
+        //   3. Write*([MsgPackCode,] T) write directly to memory, these should stay private.
+        //   4. See specifications: https://github.com/msgpack/msgpack/blob/master/spec.md
 
-		// TODO: look into and profile non-pinned alternatives for interop with C++
-		byte[] m_buffer;
+        // TODO: look into and profile non-pinned alternatives for interop with C++
+        byte[] m_buffer;
 		ulong m_position;
 
-		public MsgPackSerializer()
+        public MsgPackSerializer()
 		{
 			m_buffer = new byte[256];
 		}
@@ -50,7 +51,7 @@ namespace CitizenFX.MsgPack
 				byte[] oldBuffer = m_buffer;
 				m_buffer = new byte[oldBuffer.Length * 2];
 				Array.Copy(oldBuffer, m_buffer, oldBuffer.Length);
-			}
+            }
 		}
 
 		public static byte[] SerializeToByteArray(object value)
@@ -60,7 +61,7 @@ namespace CitizenFX.MsgPack
 			return serializer.ToArray();
 		}
 
-		#region Basic type serializtion
+		#region Basic type serialization
 
 		public void Serialize(bool value)
 		{
@@ -69,7 +70,7 @@ namespace CitizenFX.MsgPack
 
 		public void Serialize(object v) => MsgPackRegistry.Serialize(this, v);
 
-		public void Serialize(sbyte v)
+        public void Serialize(sbyte v)
 		{
 			if (v < 0)
 			{
@@ -105,7 +106,37 @@ namespace CitizenFX.MsgPack
 				Serialize(unchecked((ushort)v));
 		}
 
-		public void Serialize(ushort v)
+		public void Serialize(Delegate d)
+		{
+            // this works only if msgpack lib is built within fivem, it's not really elegant imho
+            // but it works, so let's not break it now, shall we?
+            // Do we want to make this work without depending from ReferenceFunctionManager
+            // and make our own Canonicalization of the reference id?
+#if REMOTE_FUNCTION_ENABLED
+			ulong callbackId = d.Target is _RemoteHandler _pf
+                ? _pf.m_id
+                : ExternalsManager.RegisterRemoteFunction(d.Method.ReturnType, new DynFunc(args =>
+                    args.Length == 1 || args[1] == null ? dynFunc(args[0]) : null));
+
+            var bytes = Encoding.UTF8.GetBytes(callbackId.ToString());
+			uint size = (uint)bytes.LongLength;
+			EnsureCapacity((uint)bytes.Length);
+			WriteExtraTypeHeader(size);
+			Write((byte)10);
+			Array.Copy(bytes, 0, m_buffer, (int)m_position, size);
+			m_position += size;
+#else
+            var remote = MsgPackReferenceRegistrar.Register(MsgPackDeserializer.CreateDelegate(d));
+			uint size = (uint)remote.Value.LongLength;
+			EnsureCapacity((uint)remote.Value.Length);
+			WriteExtraTypeHeader(size);
+			Write((byte)11);
+			Array.Copy(remote.Value, 0, m_buffer, (int)m_position, size);
+			m_position += size;
+#endif
+		}
+
+        public void Serialize(ushort v)
 		{
 			if (v <= (byte)MsgPackCode.FixIntPositiveMax)
 				Write(unchecked((byte)v));
@@ -181,31 +212,43 @@ namespace CitizenFX.MsgPack
 		public unsafe void Serialize(double v) => WriteBigEndian(MsgPackCode.Float64, *(ulong*)&v);
 
 		[SecuritySafeCritical]
-		public unsafe void Serialize(string v)
-		{
-			fixed (char* p_value = v)
-			{
-				uint size = (uint)CString.UTF8EncodeLength(p_value, v.Length);
+        public unsafe void Serialize(string v)
+        {
+            fixed (char* p_value = v)
+            {
+                uint size = (uint)CString.UTF8EncodeLength(p_value, v.Length);
+                uint totalSize = size + 1;
+				EnsureCapacity(totalSize);
 
-				if (size < (MsgPackCode.FixStrMax - MsgPackCode.FixStrMin))
-					Write(unchecked((byte)((uint)MsgPackCode.FixStrMin + size)));
-				else if (size <= byte.MaxValue)
-					Write(MsgPackCode.Str8, unchecked((byte)size));
-				else if (size <= ushort.MaxValue)
-					Write(MsgPackCode.Str16, unchecked((byte)size));
-				else
-					Write(MsgPackCode.Str32, unchecked((byte)size));
-
-				EnsureCapacity(size);
-				fixed (byte* p_buffer = m_buffer)
-				{
-					CString.UTF8Encode(p_buffer + m_position, p_value, v.Length);
-					m_position += size;
-				}
-			}
-		}
-
-		public unsafe void Serialize(CString v)
+                if (size < (MsgPackCode.FixStrMax - MsgPackCode.FixStrMin))
+                    Write(unchecked((byte)((uint)MsgPackCode.FixStrMin + size)));
+                else if (size <= byte.MaxValue)
+                {
+                    Write(unchecked((byte)(uint)MsgPackCode.Str8));
+                    Write(unchecked((byte)size));
+                }
+                else if (size <= ushort.MaxValue)
+                {
+                    Write(unchecked((byte)(uint)MsgPackCode.Str16));
+                    Write(unchecked((byte)(size >> 8)));
+                    Write(unchecked((byte)(size & 0xFF)));
+                }
+                else
+                {
+                    Write(unchecked((byte)(uint)MsgPackCode.Str32));
+                    Write(unchecked((byte)(size >> 24)));
+                    Write(unchecked((byte)(size >> 16)));
+                    Write(unchecked((byte)(size >> 8)));
+                    Write(unchecked((byte)(size & 0xFF)));
+                }
+                fixed (byte* p_buffer = m_buffer)
+                {
+                    CString.UTF8Encode(p_buffer + m_position, p_value, v.Length);
+                    m_position += size;
+                }
+            }
+        }
+        public unsafe void Serialize(CString v)
 		{
 			fixed (byte* p_value = v.value)
 			{
@@ -226,11 +269,34 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
-		#endregion
+		public unsafe void Serialize(IEnumerable enumerable)
+		{
+			switch(enumerable) 
+			{
+				case byte[] b:
+                fixed (byte* p_value = b)
+				{
+					var size = (uint)b.LongLength;
+                    if (size <= byte.MaxValue)
+                        Write(MsgPackCode.Bin8, unchecked((byte)size));
+                    else if (size <= ushort.MaxValue)
+                        Write(MsgPackCode.Bin16, unchecked((byte)size));
+                    else
+                        Write(MsgPackCode.Bin32, unchecked((byte)size)); 
+					EnsureCapacity(size);
+                    Array.Copy(b, 0, m_buffer, (int)m_position, size);
+                    m_position += size;
+                }
+				break;
+            }
 
-		#region Premade associative array serializers
+        }
+        
+        #endregion
 
-		public void Serialize(IReadOnlyDictionary<string, string> v)
+        #region Premade associative array serializers
+
+        public void Serialize(IReadOnlyDictionary<string, string> v)
 		{
 			WriteMapHeader((uint)v.Count);
 			foreach (var keyValue in v)
@@ -304,7 +370,7 @@ namespace CitizenFX.MsgPack
 				WriteBigEndian(MsgPackCode.Array32, v);
 		}
 
-		internal void WriteExtraTypeHeader(uint length, byte extType)
+		internal void WriteExtraTypeHeader(uint length, byte extType = 0)
 		{
 			switch (length)
 			{
@@ -401,7 +467,56 @@ namespace CitizenFX.MsgPack
 			}
 		}
 
-		private void WriteBigEndian(MsgPackCode code, sbyte value) => WriteBigEndian(code, unchecked((byte)value));
+        private void PrivatePackExtendedTypeValueCore(byte typeCode, byte[] body)
+        {
+            switch (body.Length)
+            {
+                case 1:
+                    Write(212);
+                    break;
+                case 2:
+                    Write(213);
+                    break;
+                case 4:
+                    Write(214);
+                    break;
+                case 8:
+                    Write(215);
+                    break;
+                case 16:
+                    Write(216);
+                    break;
+                default:
+                    if (body.Length < 256)
+                    {
+                        Write(199);
+                        Write((byte)((uint)body.Length & 0xFFu));
+                    }
+                    else if (body.Length < 65536)
+                    {
+                        Write(200);
+                        Write((byte)((uint)(body.Length >> 8) & 0xFFu));
+                        Write((byte)((uint)body.Length & 0xFFu));
+                    }
+                    else
+                    {
+                        Write(201);
+                        Write((byte)((uint)(body.Length >> 24) & 0xFFu));
+                        Write((byte)((uint)(body.Length >> 16) & 0xFFu));
+                        Write((byte)((uint)(body.Length >> 8) & 0xFFu));
+                        Write((byte)((uint)body.Length & 0xFFu));
+                    }
+
+                    break;
+            }
+
+            Write(typeCode);
+            foreach (byte value2 in body)
+            {
+                Write(value2);
+            }
+        }
+        private void WriteBigEndian(MsgPackCode code, sbyte value) => WriteBigEndian(code, unchecked((byte)value));
 		private void WriteBigEndian(MsgPackCode code, short value) => WriteBigEndian(code, unchecked((ushort)value));
 		private void WriteBigEndian(MsgPackCode code, int value) => WriteBigEndian(code, unchecked((uint)value));
 		private void WriteBigEndian(MsgPackCode code, long value) => WriteBigEndian(code, unchecked((ulong)value));

@@ -68,7 +68,7 @@ namespace CitizenFX.MsgPack.Formatters
 
 			if (methodSerialize == null || methodDeserialize == null)
 			{
-				string name = $"TypeFormatter<{type.FullName}>";
+				string name = $"TypeFormatter_{type.FullName}";
 				Type buildType = MsgPackRegistry.m_moduleBuilder.GetType(name);
 
 				if (buildType == null)
