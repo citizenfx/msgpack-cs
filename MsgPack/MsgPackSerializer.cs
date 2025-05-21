@@ -126,7 +126,7 @@ namespace CitizenFX.MsgPack
 			Array.Copy(bytes, 0, m_buffer, (int)m_position, size);
 			m_position += size;
 #else
-            var remote = ReferenceFunctionManager.Create(MsgPackDeserializer.CreateDelegate(d));
+            var remote = MsgPackReferenceRegistrar.Register(MsgPackDeserializer.CreateDelegate(d));
 			uint size = (uint)remote.Value.LongLength;
 			EnsureCapacity((uint)remote.Value.Length);
 			WriteExtraTypeHeader(size);
