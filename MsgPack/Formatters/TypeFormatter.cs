@@ -741,6 +741,7 @@ namespace CitizenFX.MsgPack.Formatters
 				g.MarkLabel(labels[(uint)JumpLabels.Map32]);
 				g.Emit(OpCodes.Ldarg_0);
 				g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt32), null);
+				g.Emit(OpCodes.Br, mapType);
 
 				g.MarkLabel(mapType);
 				g.Emit(OpCodes.Stloc_0);
@@ -770,35 +771,69 @@ namespace CitizenFX.MsgPack.Formatters
 				// load string
 				{
 					var lblStringCases = new Label[] { g.DefineLabel(), g.DefineLabel(), g.DefineLabel() };
+					Label stringType = g.DefineLabel();
+
+					var localCode = g.DeclareLocal(typeof(byte));
 
 					g.Emit(OpCodes.Ldarg_0);
 					g.EmitCall(OpCodes.Call, GetResultMethod(ReadByte), null);
+					g.Emit(OpCodes.Stloc, localCode);
 
+					Label lblIsFixStr = g.DefineLabel();
+					Label lblCheckStrSwitch = g.DefineLabel();
+					Label lblStringType = g.DefineLabel();
+
+					g.Emit(OpCodes.Ldloc, localCode);
+					g.Emit(OpCodes.Ldc_I4, 0xA0);
+					g.Emit(OpCodes.Blt, lblCheckStrSwitch); // if < 0xA0 go to switch
+
+					g.Emit(OpCodes.Ldloc, localCode);
+					g.Emit(OpCodes.Ldc_I4, 0xBF);
+					g.Emit(OpCodes.Bgt, lblCheckStrSwitch); // if > 0xBF go to switch
+
+					// if we are here.. it's a fixstr
+					g.MarkLabel(lblIsFixStr);
+					// length = code & 0x1F
+					g.Emit(OpCodes.Ldloc, localCode);
+					g.Emit(OpCodes.Ldc_I4, 0x1F);
+					g.Emit(OpCodes.And);
+					g.Emit(OpCodes.Conv_U4); // optional if localLength is uint
+					g.Emit(OpCodes.Stloc_S, (byte)4); // save length in local 4
+					g.Emit(OpCodes.Br, lblStringType);
+
+					// if it's not fixstr, let's switch for Str8/16/32
+					g.MarkLabel(lblCheckStrSwitch);
+
+					g.Emit(OpCodes.Ldloc, localCode);
 					g.Emit(OpCodes.Ldc_I4, (uint)MsgPackCode.Str8);
 					g.Emit(OpCodes.Sub);
 					g.Emit(OpCodes.Switch, lblStringCases);
 					g.Emit(OpCodes.Br, defaultLabel);
 
-					Label stringType = g.DefineLabel();
-					// case 0xd9: string  with 8 byte sized length
+					// case 0xd9 (Str8) with 8 byte sized length
 					g.MarkLabel(lblStringCases[0]);
 					g.Emit(OpCodes.Ldarg_0);
 					g.EmitCall(OpCodes.Call, GetResultMethod(ReadByte), null);
-					g.Emit(OpCodes.Br, stringType);
+					g.Emit(OpCodes.Conv_U4);
+					g.Emit(OpCodes.Stloc_S, (byte)4);
+					g.Emit(OpCodes.Br, lblStringType);
 
 					// case 0xda: string  with 16 byte sized length
 					g.MarkLabel(lblStringCases[1]);
 					g.Emit(OpCodes.Ldarg_0);
 					g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt16), null);
-					g.Emit(OpCodes.Br, stringType);
+					g.Emit(OpCodes.Conv_U4);
+					g.Emit(OpCodes.Stloc_S, (byte)4);
+					g.Emit(OpCodes.Br, lblStringType);
 
 					// case 0xdb: string  with 32 byte sized length
 					g.MarkLabel(lblStringCases[2]);
 					g.Emit(OpCodes.Ldarg_0);
 					g.EmitCall(OpCodes.Call, GetResultMethod(ReadUInt32), null);
-
-					g.MarkLabel(stringType);
 					g.Emit(OpCodes.Stloc_S, (byte)4);
+					g.Emit(OpCodes.Br, lblStringType);
+
+					g.MarkLabel(lblStringType);
 				}
 
 				if (members.Count > 0)
