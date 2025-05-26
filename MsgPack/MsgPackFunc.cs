@@ -51,6 +51,16 @@ namespace CitizenFX.MsgPack
 		// no need to recreate it
 		public static MsgPackFunc CreateDelegate(MsgPackFunc deleg) => deleg;
 
+		public static MethodInfo GetMethodInfoFromDelegate(MsgPackFunc func)
+		{
+			foreach (var kvp in s_wrappedMethods)
+			{
+				if (kvp.Value == func.Method)
+					return kvp.Key;
+			}
+			return null;
+		}
+
 		[SecurityCritical]
 		private static MsgPackFunc ConstructDelegate(object target, MethodInfo method)
 		{
