@@ -12,7 +12,11 @@ namespace CitizenFX.MsgPack.Formatters
 	{
 		public static Tuple<Serializer, MethodInfo> Build(Type typeKey, Type typeValue)
 		{
+#if IS_FXSERVER
 			MethodInfo methodSerialize, methodDeserialize, methodObjectSerialize;
+#else
+			MethodInfo methodDeserialize;
+#endif
 
 			Type typeKeyValuePair = typeof(KeyValuePair<,>).MakeGenericType(typeKey, typeValue);
 			Type typeDictionary = typeof(Dictionary<,>).MakeGenericType(typeKey, typeValue);
@@ -26,22 +30,34 @@ namespace CitizenFX.MsgPack.Formatters
 			{
 				TypeBuilder typeBuilder = MsgPackRegistry.m_moduleBuilder.DefineType(name);
 
+#if IS_FXSERVER
 				methodSerialize = BuildSerializer(typeKey, typeValue, typeKeyValuePair, typeIDictionary, typeBuilder);
 				BuildDeserializer(typeKey, typeValue, typeDictionary, typeBuilder);
 				BuildObjectSerializer(typeIDictionary, methodSerialize, typeBuilder);
+#else
+				BuildDeserializer(typeKey, typeValue, typeDictionary, typeBuilder);
+#endif
 
 				buildType = typeBuilder.CreateType();
 			}
 
+#if IS_FXSERVER
 			methodSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), typeIDictionary });
 			methodDeserialize = buildType.GetMethod("Deserialize");
 			methodObjectSerialize = buildType.GetMethod("Serialize", new[] { typeof(MsgPackSerializer), typeof(object) });
+#else
+			methodDeserialize = buildType.GetMethod("Deserialize");
+#endif
 
+
+#if IS_FXSERVER
 			Serializer serializeMethod = new Serializer(methodSerialize, methodObjectSerialize);
-
 			MsgPackRegistry.RegisterSerializer(typeDictionary, serializeMethod);
 			MsgPackRegistry.RegisterSerializer(typeIDictionary, serializeMethod);
 			MsgPackRegistry.RegisterSerializer(typeIReadOnlyDictionary, serializeMethod);
+#else
+			Serializer serializeMethod = new Serializer();
+#endif
 
 			MsgPackRegistry.RegisterDeserializer(typeDictionary, methodDeserialize);
 			MsgPackRegistry.RegisterDeserializer(typeIDictionary, methodDeserialize);

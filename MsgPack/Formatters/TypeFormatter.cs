@@ -1252,7 +1252,7 @@ namespace CitizenFX.MsgPack.Formatters
 			return members;
 		}
 
-		private static DynamicArray<MemberInfo> GetWritableMembers(Type type)
+		internal static DynamicArray<MemberInfo> GetWritableMembers(Type type)
 		{
 			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
 			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite))
@@ -1261,7 +1261,7 @@ namespace CitizenFX.MsgPack.Formatters
 			return members;
 		}
 
-		private static DynamicArray<MemberInfo> GetReadAndWritableKeyedMembers(Type type)
+		internal static DynamicArray<MemberInfo> GetReadAndWritableKeyedMembers(Type type)
 		{
 			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
 			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.CanWrite && p.GetGetMethod()?.GetParameters().Length == 0))
@@ -1271,7 +1271,7 @@ namespace CitizenFX.MsgPack.Formatters
 			return members;
 		}
 
-		private static DynamicArray<MemberInfo> GetReadableIndexMembers(Type type)
+		internal static DynamicArray<MemberInfo> GetReadableIndexMembers(Type type)
 		{
 			var members = new DynamicArray<MemberInfo>(type.GetMembers(BindingFlags.Instance | BindingFlags.Public));
 			members.RemoveAll(m => !((m is FieldInfo || (m is PropertyInfo p && p.GetGetMethod()?.GetParameters().Length == 0))
@@ -1294,7 +1294,7 @@ namespace CitizenFX.MsgPack.Formatters
 			g.Emit(storeLoc);
 		}
 
-		private static void EmitDebugWriteLine(this ILGenerator g, string value)
+		internal static void EmitDebugWriteLine(this ILGenerator g, string value)
 		{
 			g.Emit(OpCodes.Ldstr, value);
 #if MONO_V2
