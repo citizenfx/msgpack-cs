@@ -227,7 +227,13 @@ namespace CitizenFX.MsgPack.Formatters
 
 							// Value
 							g.Emit(OpCodes.Ldarg_0);
-							g.Emit(OpCodes.Ldarg_1);
+							// if it's a struct.. we handle it differently
+							// using the address of the argument and not its value.
+							if (type.IsValueType)
+								g.Emit(OpCodes.Ldarga_S, 1);
+							else
+								g.Emit(OpCodes.Ldarg_1);
+
 							g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
 							g.EmitCall(OpCodes.Call, serializer, null);
 						}
@@ -290,11 +296,11 @@ namespace CitizenFX.MsgPack.Formatters
 
 					case PropertyInfo property:
 						{
-							var methodFieldSerializer = type == property.PropertyType
+							var methodPropertySerializer = type == property.PropertyType
 								? currentSerializer
 								: MsgPackRegistry.GetOrCreateSerializer(property.PropertyType);
 
-							if (methodFieldSerializer == null)
+							if (methodPropertySerializer == null)
 								throw new NotSupportedException($"Requested serializer for {type.Name}.{property.Name} of type {property.PropertyType} could not be found.");
 
 							// Key
@@ -304,9 +310,16 @@ namespace CitizenFX.MsgPack.Formatters
 
 							// Value
 							g.Emit(OpCodes.Ldarg_0);
-							g.Emit(OpCodes.Ldarg_1);
+							// Same as above
+							// if it's a struct.. we handle it differently
+							// using the address of the argument and not its value.
+							if (type.IsValueType)
+								g.Emit(OpCodes.Ldarga_S, 1);
+							else
+								g.Emit(OpCodes.Ldarg_1);
+
 							g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
-							g.EmitCall(OpCodes.Call, methodFieldSerializer, null);
+							g.EmitCall(OpCodes.Call, methodPropertySerializer, null);
 						}
 						break;
 
