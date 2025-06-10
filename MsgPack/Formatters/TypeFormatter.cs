@@ -230,15 +230,11 @@ namespace CitizenFX.MsgPack.Formatters
 							// if it's a struct.. we handle it differently
 							// using the address of the argument and not its value.
 							if (type.IsValueType)
-							{
 								g.Emit(OpCodes.Ldarga_S, 1);
-								g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
-							}
 							else
-							{
 								g.Emit(OpCodes.Ldarg_1);
-								g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
-							}
+
+							g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
 							g.EmitCall(OpCodes.Call, serializer, null);
 						}
 						break;
@@ -318,15 +314,11 @@ namespace CitizenFX.MsgPack.Formatters
 							// if it's a struct.. we handle it differently
 							// using the address of the argument and not its value.
 							if (type.IsValueType)
-							{
 								g.Emit(OpCodes.Ldarga_S, 1);
-								g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
-							}
 							else
-							{
 								g.Emit(OpCodes.Ldarg_1);
-								g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
-							}
+
+							g.EmitCall(OpCodes.Call, property.GetGetMethod(), null);
 							g.EmitCall(OpCodes.Call, methodPropertySerializer, null);
 						}
 						break;
