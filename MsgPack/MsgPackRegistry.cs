@@ -146,6 +146,10 @@ namespace CitizenFX.MsgPack
 				{
 					serializer.Serialize(e);
 				}
+				else if (type.IsEnum)
+				{
+					serializer.Serialize(Convert.ToUInt64(obj));
+				}
 #endif
 				else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
 				{
@@ -227,6 +231,10 @@ namespace CitizenFX.MsgPack
 					return new Tuple<Serializer, MethodInfo>(m_serializers[type], m_serializers[type].m_method);
 				else
 					throw new NotSupportedException($"{type} should've already been registered");
+			}
+			else if (type.IsEnum)
+			{
+				return EnumFormatter.Build(type);
 			}
 			else if (type.IsArray)
 			{
