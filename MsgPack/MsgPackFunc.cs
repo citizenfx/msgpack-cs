@@ -147,28 +147,36 @@ namespace CitizenFX.MsgPack
 					g.MarkLabel(lblOutOfRange);
 					if (parameter.IsOptional)
 					{
-						switch (parameter.DefaultValue)
+						if (parameter.DefaultValue is null)
 						{
-							case null: g.Emit(OpCodes.Ldnull); break;
-							case string v: g.Emit(OpCodes.Ldstr, v); break;
-
-							case byte v: g.Emit(OpCodes.Ldc_I4, v); break;
-							case ushort v: g.Emit(OpCodes.Ldc_I4, v); break;
-							case uint v: g.Emit(OpCodes.Ldc_I4, v); break;
-							case ulong v: g.Emit(OpCodes.Ldc_I4, v); break;
-							case sbyte v: g.Emit(OpCodes.Ldc_I4, v); break;
-							case short v: g.Emit(OpCodes.Ldc_I4, v); break;
-							case int v: g.Emit(OpCodes.Ldc_I4, v); break;
+							// Default is null: just load null on stack regardless of the type
+							g.Emit(OpCodes.Ldnull);
 						}
-
-						// Generic way to also support Nullable<> types
-						if (t.IsGenericType)
+						else
 						{
-							Type[] genericArguments = t.GetGenericArguments();
-							if (genericArguments.Length == 1)
-								g.Emit(OpCodes.Newobj, t.GetConstructor(genericArguments));
-							else
-								throw new ArgumentException($"Default value for {t} is unsupported.");
+							switch (parameter.DefaultValue)
+							{
+								case null: g.Emit(OpCodes.Ldnull); break;
+								case string v: g.Emit(OpCodes.Ldstr, v); break;
+
+								case byte v: g.Emit(OpCodes.Ldc_I4, v); break;
+								case ushort v: g.Emit(OpCodes.Ldc_I4, v); break;
+								case uint v: g.Emit(OpCodes.Ldc_I4, v); break;
+								case ulong v: g.Emit(OpCodes.Ldc_I4, v); break;
+								case sbyte v: g.Emit(OpCodes.Ldc_I4, v); break;
+								case short v: g.Emit(OpCodes.Ldc_I4, v); break;
+								case int v: g.Emit(OpCodes.Ldc_I4, v); break;
+							}
+
+							// Generic way to also support Nullable<> types
+							if (t.IsGenericType)
+							{
+								Type[] genericArguments = t.GetGenericArguments();
+								if (genericArguments.Length == 1)
+									g.Emit(OpCodes.Newobj, t.GetConstructor(genericArguments));
+								else
+									throw new ArgumentException($"Default value for {t} is unsupported.");
+							}
 						}
 					}
 					else
