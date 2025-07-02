@@ -159,7 +159,7 @@ namespace CitizenFX.MsgPack
                 else if (v >= short.MinValue)
                     WriteBigEndian(MsgPackCode.Int16, (short)v);
                 else
-                    WriteBigEndian(MsgPackCode.Int32, (short)v);
+                    WriteBigEndian(MsgPackCode.Int32, v);
             }
             else
                 Serialize(unchecked((uint)v));
