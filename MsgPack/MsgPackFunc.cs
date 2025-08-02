@@ -150,29 +150,39 @@ namespace CitizenFX.MsgPack
 						if (parameter.DefaultValue is null)
 						{
 							// Default is null: just load null on stack regardless of the type
+							// the switch below don't check for nullability, so we can safely emit null here.
 							g.Emit(OpCodes.Ldnull);
 						}
 						else
 						{
 							switch (parameter.DefaultValue)
 							{
-								case null: g.Emit(OpCodes.Ldnull); break;
+								/*
+								 * Decimal is a special case, since it can't be represented as a single value in MsgPack.
+								 * Casting it to double is the only way to get it into MsgPack, so we do that here.
+								 * The problem is that MsgPack doesn't support decimal, so we have to convert it to double.
+								 * Downside is that it loses precision, but it's the only way to get it into MsgPack.
+								 */
+								case bool v: g.Emit(v ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); break;
+								case char v: g.Emit(OpCodes.Ldc_I4, v); break;
 								case string v: g.Emit(OpCodes.Ldstr, v); break;
-
 								case byte v: g.Emit(OpCodes.Ldc_I4, v); break;
 								case ushort v: g.Emit(OpCodes.Ldc_I4, v); break;
 								case uint v: g.Emit(OpCodes.Ldc_I4, v); break;
-								case ulong v: g.Emit(OpCodes.Ldc_I4, v); break;
 								case sbyte v: g.Emit(OpCodes.Ldc_I4, v); break;
 								case short v: g.Emit(OpCodes.Ldc_I4, v); break;
 								case int v: g.Emit(OpCodes.Ldc_I4, v); break;
+								case long v: g.Emit(OpCodes.Ldc_I8, v); break;
+								case ulong v: g.Emit(OpCodes.Ldc_I8, v); break;
+								case float v: g.Emit(OpCodes.Ldc_R4, v); break;
+								case double v: g.Emit(OpCodes.Ldc_R8, v); break;
+								case decimal v: g.Emit(OpCodes.Ldc_R8, (double)v); break;
 							}
-
 							// Generic way to also support Nullable<> types
 							if (t.IsGenericType)
 							{
 								Type[] genericArguments = t.GetGenericArguments();
-								if (genericArguments.Length == 1)
+								if (genericArguments.Length >= 1)
 									g.Emit(OpCodes.Newobj, t.GetConstructor(genericArguments));
 								else
 									throw new ArgumentException($"Default value for {t} is unsupported.");
