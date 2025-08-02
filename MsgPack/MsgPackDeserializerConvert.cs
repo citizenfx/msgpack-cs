@@ -508,6 +508,50 @@ namespace CitizenFX.MsgPack
 			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(double)}");
 		}
 
+		public decimal DeserializeAsDecimal()
+		{
+			MsgPackCode type = ReadType();
+			if (type <= MsgPackCode.FixIntPositiveMax) // positive fixint
+				return (decimal)type;
+			else if (type >= MsgPackCode.FixStrMin) // fixstr
+			{
+				if (type <= MsgPackCode.FixStrMax)
+					return decimal.Parse(ReadString((uint)type - (uint)MsgPackCode.FixStrMin));
+				else if (type >= MsgPackCode.FixIntNegativeMin) // anything at the end of our byte
+					return unchecked((decimal)(sbyte)type);
+			}
+
+			switch (type)
+			{
+				case MsgPackCode.Nil: // null
+				case MsgPackCode.False: return (decimal)0;
+				case MsgPackCode.True: return (decimal)1;
+				case MsgPackCode.Float32: return (decimal)ReadSingle();
+				case MsgPackCode.Float64: return (decimal)ReadDouble();
+				case MsgPackCode.UInt8: return (decimal)ReadUInt8();
+				case MsgPackCode.UInt16: return (decimal)ReadUInt16();
+				case MsgPackCode.UInt32: return (decimal)ReadUInt32();
+				case MsgPackCode.UInt64: return (decimal)ReadUInt64();
+				case MsgPackCode.Int8: return (decimal)ReadInt8();
+				case MsgPackCode.Int16: return (decimal)ReadInt16();
+				case MsgPackCode.Int32: return (decimal)ReadInt32();
+				case MsgPackCode.Int64: return (decimal)ReadInt64();
+
+				case MsgPackCode.FixExt1: return (decimal)ReadExtraType(1);
+				case MsgPackCode.FixExt2: return (decimal)ReadExtraType(2);
+				case MsgPackCode.FixExt4: return (decimal)ReadExtraType(4);
+				case MsgPackCode.FixExt8: return (decimal)ReadExtraType(8);
+				case MsgPackCode.FixExt16: return (decimal)ReadExtraType(16);
+
+				case MsgPackCode.Str8: return decimal.Parse(ReadString(ReadUInt8()));
+				case MsgPackCode.Str16: return decimal.Parse(ReadString(ReadUInt16()));
+				case MsgPackCode.Str32: return decimal.Parse(ReadString(ReadUInt32()));
+			}
+
+			SkipObject(type);
+			throw new InvalidCastException($"MsgPack type {type} could not be deserialized into type {typeof(decimal)}");
+		}
+
 		public string DeserializeAsString()
 		{
 			MsgPackCode type = (MsgPackCode)ReadByte();

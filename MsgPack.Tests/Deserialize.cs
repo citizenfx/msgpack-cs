@@ -49,6 +49,37 @@ namespace CitizenFX.MsgPack.Tests
 			Assert.Fail();
 			throw new AssertFailedException(); // Assert.Fail throws this as well
 		}
+		public static int ValidateFixExtHeader(this ref MsgPackDeserializer deserializer)
+		{
+			byte type = deserializer.ReadByte();
+			switch (type)
+			{
+				case 0xD4: return 1; // FixExt1
+				case 0xD5: return 2; // FixExt2
+				case 0xD6: return 4; // FixExt4
+				case 0xD7: return 8; // FixExt8
+				case 0xD8: return 16; // FixExt16
+			}
+			Assert.Fail();
+			throw new AssertFailedException(); // Assert.Fail throws this as well
+		}
+
+		public static bool ValidateFixExtType(this ref MsgPackDeserializer deserializer)
+		{
+			int type = deserializer.ReadByte();
+			switch (type)
+			{
+				case 10: 
+				case 11: 
+				case 12: 
+				case 20: 
+				case 21: 
+				case 22:
+					return true;
+			}
+			Assert.Fail();
+			throw new AssertFailedException(); // Assert.Fail throws this as well
+		}
 
 		public static void Validate<T>(this ref MsgPackDeserializer deserializer, T expected)
 		{
@@ -102,6 +133,7 @@ namespace CitizenFX.MsgPack.Tests
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector3));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector4));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Quaternion));
+			MsgPackRegistry.GetOrCreateDeserializer(typeof(decimal));
 		}
 
 		[TestMethod]
@@ -283,6 +315,17 @@ namespace CitizenFX.MsgPack.Tests
 				deserializer.ValidateException<uint[], InvalidCastException>();
 				deserializer.Validate(new Dictionary<string, uint> { { "hi", 104 }, { "bye", 62 } });
 				deserializer.Validate(null as Dictionary<string, uint>);
+			}
+		}
+
+		[TestMethod]
+		public unsafe void DeserializeDecimal()
+		{
+			byte[] input = new byte[] { 0xD8, 0x0C, 0x6E, 0x39, 0x81, 0x15, 0x46, 0xBE, 0xC9, 0xB1, 0x27, 0xE4, 0x1B, 0x32, 0x00, 0x00, 0x00, 0x00 };
+			fixed (byte* ptr = input)
+			{
+				var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
+				deserializer.Validate(12345678901234567890123456789m);
 			}
 		}
 	}

@@ -51,6 +51,7 @@ namespace CitizenFX.MsgPack
 	{
 		RemoteFunc = 10,
 		LocalFunc = 11,
+		Decimal = 12,
 
 		Vector2 = 20,
 		Vector3 = 21,

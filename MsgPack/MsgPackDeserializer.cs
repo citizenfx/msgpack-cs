@@ -154,6 +154,16 @@ namespace CitizenFX.MsgPack
 
 		internal unsafe void SkipString(uint length) => AdvancePointer(length);
 
+		internal unsafe decimal ReadDecimal()
+		{
+			// Decimal is stored as 4x int32
+			int lo = ReadInt32();
+			int mid = ReadInt32();
+			int hi = ReadInt32();
+			int flags = ReadInt32();
+			return new decimal(lo, mid, hi, (flags & 0x80000000) != 0, (byte)((flags >> 16) & 0x7F));
+		}
+
 		#endregion
 
 		#region Read complex type operations
@@ -271,6 +281,7 @@ namespace CitizenFX.MsgPack
 				case 10: // remote funcref
 				case 11: // local funcref
 					return ReadCallback(length);
+				case 12: return ReadDecimal();
 				case 20: return ReadVector2();
 				case 21: return ReadVector3();
 				case 22: return ReadVector4();
@@ -290,6 +301,7 @@ namespace CitizenFX.MsgPack
 				case 11: // local funcref
 					SkipCallback(length);
 					return nameof(Callback);
+				case 12: return ReadDecimal().ToString();
 				case 20: return ReadVector2().ToString();
 				case 21: return ReadVector3().ToString();
 				case 22: return ReadVector4().ToString();
