@@ -176,7 +176,6 @@ namespace CitizenFX.MsgPack
 								case ulong v: g.Emit(OpCodes.Ldc_I8, v); break;
 								case float v: g.Emit(OpCodes.Ldc_R4, v); break;
 								case double v: g.Emit(OpCodes.Ldc_R8, v); break;
-								case decimal v: g.Emit(OpCodes.Ldc_R8, (double)v); break;
 							}
 							// Generic way to also support Nullable<> types
 							if (t.IsGenericType)

@@ -19,11 +19,9 @@ namespace CitizenFX.MsgPack.Tests
 		[TestInitialize]
 		public void _Dummy()
 		{
-			MsgPackRegistry.GetOrCreateSerializer(typeof(decimal));
 			MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>));
 			MsgPackRegistry.GetOrCreateSerializer(typeof(string[]));
 
-			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializer(typeof(decimal)) != null);
 			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializer(typeof(Dictionary<string, string>)) != null);
 			Assert.IsTrue(MsgPackRegistry.GetOrCreateSerializer(typeof(string[])) != null);
 		}
@@ -43,17 +41,6 @@ namespace CitizenFX.MsgPack.Tests
 		{
 			Validate(9999.2312312f, new byte[] { 0xCA, 0x46, 0x1C, 0x3C, 0xED });
 			Validate(123456.455463, new byte[] { 0xCB, 0x40, 0xFE, 0x24, 0x07, 0x49, 0x93, 0x92, 0x19 });
-		}
-
-		[TestMethod]
-		public void SerializeDecimal()
-		{
-			Validate(12345678901234567890123456789m, new byte[]
-			{
-				0xD8, 0x0C, 0x6E, 0x39, 0x81, 0x15, 0x46, 0xBE,
-				0xC9, 0xB1, 0x27, 0xE4, 0x1B, 0x32, 0x00, 0x00,
-				0x00, 0x00
-			});
 		}
 
 		[TestMethod]

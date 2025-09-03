@@ -133,7 +133,6 @@ namespace CitizenFX.MsgPack.Tests
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector3));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Vector4));
 			MsgPackRegistry.GetOrCreateDeserializer(typeof(Quaternion));
-			MsgPackRegistry.GetOrCreateDeserializer(typeof(decimal));
 		}
 
 		[TestMethod]
@@ -315,17 +314,6 @@ namespace CitizenFX.MsgPack.Tests
 				deserializer.ValidateException<uint[], InvalidCastException>();
 				deserializer.Validate(new Dictionary<string, uint> { { "hi", 104 }, { "bye", 62 } });
 				deserializer.Validate(null as Dictionary<string, uint>);
-			}
-		}
-
-		[TestMethod]
-		public unsafe void DeserializeDecimal()
-		{
-			byte[] input = new byte[] { 0xD8, 0x0C, 0x6E, 0x39, 0x81, 0x15, 0x46, 0xBE, 0xC9, 0xB1, 0x27, 0xE4, 0x1B, 0x32, 0x00, 0x00, 0x00, 0x00 };
-			fixed (byte* ptr = input)
-			{
-				var deserializer = new MsgPackDeserializer(ptr, (ulong)input.Length, "");
-				deserializer.Validate(12345678901234567890123456789m);
 			}
 		}
 	}

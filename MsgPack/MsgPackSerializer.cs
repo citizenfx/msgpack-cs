@@ -212,25 +212,6 @@ namespace CitizenFX.MsgPack
 
         public unsafe void Serialize(float v) => WriteBigEndian(MsgPackCode.Float32, *(uint*)&v);
         public unsafe void Serialize(double v) => WriteBigEndian(MsgPackCode.Float64, *(ulong*)&v);
-		public unsafe void Serialize(decimal v)
-		{
-			// Decimal is serialized as a 16-byte fixed-length binary
-			int[] bits = decimal.GetBits(v);
-			Write((byte)MsgPackCode.FixExt16);
-			// Extension type (custom byte for decimal is 12)
-			Write((byte)12);
-			WriteInt32BE(bits[0]); // decimal need 4 bytes for each integer part,
-			WriteInt32BE(bits[1]); //serialize(int) is dynamic and can write 1, 2, 4 or 8 bytes
-			WriteInt32BE(bits[2]); // so it's not optimal for our case, we can write directly
-			WriteInt32BE(bits[3]); // the 4 integers that compose the decimal
-		}
-		internal void WriteInt32BE(int value)
-		{
-			Write((byte)((value >> 24) & 0xFF));
-			Write((byte)((value >> 16) & 0xFF));
-			Write((byte)((value >> 8) & 0xFF));
-			Write((byte)(value & 0xFF));
-		}
 
 		[SecuritySafeCritical]
         public unsafe void Serialize(string v)

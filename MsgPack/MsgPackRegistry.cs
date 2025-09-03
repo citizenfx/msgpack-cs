@@ -136,10 +136,6 @@ namespace CitizenFX.MsgPack
 						case double v: serializer.Serialize(v); break;
 					}
 				}
-				else if (obj is decimal v)
-				{
-					serializer.Serialize(v);
-				}
 				else if (obj is Delegate del)
 				{
 					// add remote function delegate support ? - don't think if it's even planned or supported
@@ -229,7 +225,7 @@ namespace CitizenFX.MsgPack
 
 		private static Tuple<Serializer, MethodInfo> CreateSerializer(Type type)
 		{
-			if (type.IsPrimitive || type == typeof(decimal))
+			if (type.IsPrimitive)
 			{
 				if (m_serializers.ContainsKey(type))
 					return new Tuple<Serializer, MethodInfo>(m_serializers[type], m_serializers[type].m_method);
