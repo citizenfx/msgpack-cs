@@ -49,6 +49,37 @@ namespace CitizenFX.MsgPack.Tests
 			Assert.Fail();
 			throw new AssertFailedException(); // Assert.Fail throws this as well
 		}
+		public static int ValidateFixExtHeader(this ref MsgPackDeserializer deserializer)
+		{
+			byte type = deserializer.ReadByte();
+			switch (type)
+			{
+				case 0xD4: return 1; // FixExt1
+				case 0xD5: return 2; // FixExt2
+				case 0xD6: return 4; // FixExt4
+				case 0xD7: return 8; // FixExt8
+				case 0xD8: return 16; // FixExt16
+			}
+			Assert.Fail();
+			throw new AssertFailedException(); // Assert.Fail throws this as well
+		}
+
+		public static bool ValidateFixExtType(this ref MsgPackDeserializer deserializer)
+		{
+			int type = deserializer.ReadByte();
+			switch (type)
+			{
+				case 10: 
+				case 11: 
+				case 12: 
+				case 20: 
+				case 21: 
+				case 22:
+					return true;
+			}
+			Assert.Fail();
+			throw new AssertFailedException(); // Assert.Fail throws this as well
+		}
 
 		public static void Validate<T>(this ref MsgPackDeserializer deserializer, T expected)
 		{

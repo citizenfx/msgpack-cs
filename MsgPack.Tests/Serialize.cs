@@ -200,6 +200,7 @@ namespace CitizenFX.MsgPack.Tests
 					0xCD, 0x04, 0xD2,                         // uint16 1234
 				}
 			);
+
 		}
 	}
 }

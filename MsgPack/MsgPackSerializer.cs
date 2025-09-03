@@ -213,7 +213,7 @@ namespace CitizenFX.MsgPack
         public unsafe void Serialize(float v) => WriteBigEndian(MsgPackCode.Float32, *(uint*)&v);
         public unsafe void Serialize(double v) => WriteBigEndian(MsgPackCode.Float64, *(ulong*)&v);
 
-        [SecuritySafeCritical]
+		[SecuritySafeCritical]
         public unsafe void Serialize(string v)
         {
             fixed (char* p_value = v)
